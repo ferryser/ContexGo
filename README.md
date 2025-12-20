@@ -1,88 +1,88 @@
-# ContexGo
+# ContexGo: Personal Context Intelligence Agent
 
-**ContexGo** 是一个本地优先（Local-first）的个人上下文感知 Agent。
+> **Quantify Locally. Think Globally.**
+>
+> 一个“本地感知 + 云端思考”的个人上下文智能体。它在本地提取行为语义，通过双重安全网关脱敏后，利用云端大模型构建可被解释、修正和重算的“第二大脑”。
 
-它致力于解决工程化层面的核心挑战：如何将连续、稠密且往往伴随延迟的多模态人类行为信号，转换为稳定、可对齐、可学习且可解释的上下文表示。
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-通过将原始行为流压缩为结构化的时间窗口摘要，并结合大模型（LLM）进行受控的语义解释，ContexGo 帮助用户构建一个可动态重算的个人行为上下文索引。
+---
 
-## 核心架构原则
+## 📖 项目背景 (Introduction)
 
-ContexGo 的架构建立在对行为数据的分层处理之上，强调数据流的结构化与解释层的分离。
+**ContexGo** 致力于解决个人数字助理领域的一个核心矛盾：**本地算力的局限性与认知洞察的高质量需求之间的断裂。**
 
-### 1. 分层上下文模型
-系统明确区分了客观事实与主观解释，通过三层架构实现数据的逐步抽象：
+传统的本地大模型方案往往拖累系统性能，而纯云端方案又面临严重的隐私风险。ContexGo 采用 **“瘦客户端 (Thin Client)”** 架构：
+1.  **本地 (Local):** 负责极低功耗的数据采集、清洗与**本地词元提取 (Token Extraction)**。
+2.  **云端 (Cloud):** 负责高维度的语义推理与心理状态分析（接入 DeepSeek-V3 / GPT-4o）。
 
-* **事件层 (Event Layer):** 仅记录“发生了什么变化”。这是系统的不可变（Append-only）基石，不包含高层语义判断。
-* **结构化摘要层 (Structured Summary Layer):** 对事件流在固定时间窗口内的结构化投影。它是系统状态的核心，负责统计与聚合。
-* **解释层 (Interpretation Layer):** 由 LLM 生成的自然语言视图（View）。它作为一种可被推翻、重算和替换的“软解释”，不作为系统底层的唯一事实。
+---
 
-### 2. 正交的时间与任务结构
-系统同时维护两种正交的数据结构，以适应复杂的行为模式：
+## 🏗️ 核心架构 (Architecture Principles)
 
-* **时间窗口 (Time Window):**
-    * 系统的稳定主轴（如固定 5 分钟粒度）。
-    * 用于承载统计数据、同步状态以及触发重算。
-    * 回答核心问题：“在该时间段内，发生了什么强度的行为？”
-* **任务区间 (Task Span):**
-    * 覆盖在多个时间窗口之上的逻辑区间。
-    * 作为引用关系存在，用于连接离散的时间窗口。
-    * 回答语义问题：“这些分散的时间片段是否属于同一个逻辑任务？”
+### 1. 混合计算模型 (Hybrid Compute Model)
+* **Hard Core (Local):** 复刻 [MineContext](https://github.com/volcengine/MineContext) 的逻辑。使用系统级 API（Accessibility/Windows OCR）直接提取屏幕文本，**不上传任何截图到云端**。
+* **Soft Brain (Cloud):** 接收 JSON 纯文本摘要，返回高质量的心理侧写与行为建议。
 
-### 3. 异步一致性策略
-面对多模态信号（截图/键鼠/窗口/词元）天然存在的重叠、乱序和语义滞后特性，ContexGo 不在事件采集层强求对齐，而是通过高层的结构化摘要与解释层来后置处理一致性。这允许系统以非阻塞的方式摄入高频信号，并接受语义理解的渐进式更新。
+### 2. 双重拒绝器 (Dual Gatekeepers)
+为了适配云端架构，系统引入了两层拦截机制：
+* **Pre-flight Gatekeeper (发送前):** **隐私与成本控制。** 拦截敏感词（如密码、身份证号），合并碎片请求，并在上下文无变化（低熵）时阻止 API 调用以节省费用。
+* **Post-flight Gatekeeper (接收后):** **质量与安全控制。** 过滤云端返回的幻觉内容、重复建议或格式错误的指令。
 
-## 系统处理流程
+### 3. 懒惰采样 (Lazy Sampling)
+采用 **“事件驱动 + 长间隔兜底”** 策略（>10s），仅在窗口切换或长时间活跃时捕捉快照，确保后台运行几乎零负载。
 
-ContexGo 构建了一个从原始信号到自然语言解释的单向（但在解释层可循环）数据管道：
+---
 
-### Phase 1: 多模态感知与去重
-* **本地信号采集:** 摄入屏幕截图（仅用于差异分析）、外设活跃度（键盘/鼠标频率）以及窗口/端口状态。
-* **变化检测:** 采用 MineContext 策略，聚焦于“行为是否发生显著变化”而非理解具体内容，将连续的稳定状态折叠为物理区间。
+## 🧩 模块详解 (Modules)
 
-### Phase 2: 受控语义生成
-* **Schema 驱动:** LLM 在严格受控的 Schema 下运行，生成候选任务词元（Task Tokens）。
-* **置信度标注:** 每个生成的语义单元均附带 Confidence 评分与 Evidence References（行为变化来源），允许系统容错与回溯。
+### 🛡️ Module I: Sentinel (本地感知)
+*轻量化，无 GPU 依赖*
+* **Smart Monitor:** 监听窗口句柄与键鼠活跃度。
+* **Local Tokenizer:**
+    * **Accessibility API:** 直接读取 UI 树获取文本（VSCode 文件名, 浏览器 URL），零算力消耗。
+    * **Windows OCR:** 仅在必要时调用本地离线 OCR 引擎提取图像文本。
+    * **Privacy Lock:** **原始截图在提取文本后立即内存销毁，绝不落盘，绝不上传。**
 
-### Phase 3: 统一事件流构建
-所有输入最终归一化为标准的结构化事件：
-* **基础事件:** `input_activity`, `window_focus`, `idle`
-* **任务事件:** `task_start`, `task_end`, `task_token`
-所有事件均具备明确的时间属性与可合并的 Payload。
+### ⚙️ Module II: Processing (结构化)
+* **Time Aggregator:** 将离散的采样点聚合为 5 分钟粒度的 **TimeWindow** 对象。
+* **Context Clustering:** 在本地进行初步的规则聚类（如识别 Project A vs Project B），减少发往云端的 Token 数量。
 
-### Phase 4: 时间窗口聚合 (Core)
-以固定时间窗口为单位，系统计算并输出核心状态对象：
+### ☁️ Module III: Brain (云端大脑)
+* **Cloud Client:** 兼容 OpenAI 接口标准的客户端（支持 DeepSeek, Moonshot, ChatGPT）。
+* **Analyst:** 周期性（如每 15 分钟）发送压缩后的 JSON 摘要，请求云端进行深度心理推理。
+* **Cost Control:** 动态调整采样发送频率，避免由静止画面产生无效 API 开销。
 
-```json
-{
-  "window": "10:00–10:05",
-  "task_started": ["project_alpha_init"],
-  "task_ended": [],
-  "task_tokens": {
-    "project_alpha_init": ["git_config", "scaffold"]
-  },
-  "input_level": {
-    "keyboard": "high",
-    "mouse": "low"
-  },
-  "window_switch": "low",
-  "confidence": 0.85
-}
-```
+### 🖥️ Module IV: Interaction (Flet UI)
+* **Dashboard:** 可视化展示时间轴与云端生成的 Insight。
+* **Intervention:** Windows 系统级弹窗。仅在 Gatekeeper 放行高置信度建议时触发。
 
-### Phase 5: 动态解释与重算
-LLM 消费上述结构化摘要，结合前后窗口上下文生成人类可读的解释文本。
-* **动态性:** 当检测到新的任务词元或上下文发生显著漂移时，系统会触发有限重算。
-* **修正机制:** 自然语言摘要作为“视图”，可随着后续信号的补充而被更新或替换，从而构建一个不断逼近真实的上下文表示。
+---
 
-## 项目定位
+## 🛠️ 技术栈 (Tech Stack)
 
-ContexGo 作为一个工程优先的 Agent 项目，旨在探索个人上下文数据的结构合理性与长期可演进性。
+| 模块 | 技术选型 | 说明 |
+| :--- | :--- | :--- |
+| **GUI Framework** | **Flet** | Python wrapper for Flutter，单进程高性能渲染 |
+| **Cloud LLM** | **OpenAI SDK** | 接入 **DeepSeek-V3** (推荐) 或 GPT-4o |
+| **Local OCR** | **Windows.Media.Ocr** | 离线、免费、系统级文本提取 |
+| **Capture** | **MSS / Win32 API** | 毫秒级截图与句柄获取 |
+| **Storage** | **SQLite** | 本地结构化事件存储 |
 
-* **面向用户:** 高自驱力的 Power Users 与开发者。
-* **设计哲学:** 结构优先于功能，边界优先于智能。
-* **核心价值:** 构建一个可被不断解释、修正和重算的个人数字化上下文。
+---
 
-## License
+## ⚠️ 隐私与安全声明
 
-[License Type Placeholder]
+1.  **数据最小化:** 云端大模型**仅能看到**经过脱敏的纯文本 JSON 摘要（如 `{"app": "VSCode", "title": "main.py"}`）。
+2.  **截图本地化:** 所有的视觉数据处理（截图、OCR）均在本地内存中完成，**严禁**将图像二进制数据发送至网络。
+3.  **主动脱敏:** Pre-flight Gatekeeper 会在上传前通过正则强制过滤常见的 PII（个人身份信息）。
+
+## 🤝 贡献 (Contributing)
+
+欢迎提交 Issue 和 Pull Request。
+
+## 📄 License
+
+**GNU Affero General Public License v3.0 (AGPLv3)**
+
+
