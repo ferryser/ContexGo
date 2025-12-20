@@ -120,4 +120,4 @@
 
 ## 6. 协议 (License)
 
-**AGPL v3**
+**apache 2.0**
