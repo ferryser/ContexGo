@@ -1,67 +1,72 @@
-# ContexGo: Personal Context Intelligence Agent
+# ContexGo: Context-Aware Task State Agent
 
-> **Quantify Locally. Think Globally. Sync Seamlessly.**
+> **Capture. Structure. Align.**
 >
-> 一个“本地感知 + 云端思考”的个人上下文智能体。它在本地提取行为语义，利用云端大模型构建“第二大脑”，并通过 CRDT + Tailscale 实现多设备间的无缝记忆同步。
+> 一个本地优先的分布式上下文智能体。旨在通过工程化手段，将非结构化的行为流转换为可组合、可演算的任务状态，协助用户通过时间碎片的有序堆叠，实现从微观行为到宏观目标的对齐。
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Status: Architectural Design](https://img.shields.io/badge/Status-Blueprint_Phase-blue)]()
 
 ---
 
-## 📖 项目背景 (Introduction)
+## 1. 初步设计图景 (Preliminary Vision)
 
-**ContexGo** 致力于解决个人数字助理领域的一个核心矛盾：**本地算力的局限性与认知洞察的高质量需求之间的断裂。**
+本项目致力于构建一个**可持续的个人时间组合系统**。它不满足于仅仅记录“时间开销”，而是试图构建一个**“数字第二大脑”的索引层**。
 
-传统的本地大模型方案往往拖累系统性能，而纯云端方案又面临严重的隐私风险。ContexGo 采用 **“瘦客户端 (Thin Client)”** 架构：
-1.  **本地 (Local):** 负责极低功耗的数据采集、清洗与**本地词元提取 (Token Extraction)**。
-2.  **云端 (Cloud):** 负责高维度的语义推理与心理状态分析（接入 DeepSeek-V3 / GPT-4o）。
-3.  **多端 (Sync):** 基于 CRDT 技术与虚拟局域网，将你在台式机、笔记本等不同设备上的行为碎片，自动编织成一张完整的全天候上下文网络。
-
----
-
-## 🏗️ 核心架构 (Architecture Principles)
-
-### 1. 混合计算模型 (Hybrid Compute Model)
-* **Hard Core (Local):** 复刻 [MineContext](https://github.com/volcengine/MineContext) 的逻辑。使用系统级 API（Accessibility/Windows OCR）直接提取屏幕文本，**不上传任何截图到云端**。
-* **Soft Brain (Cloud):** 接收 JSON 纯文本摘要，返回高质量的心理侧写与行为建议。
-
-### 2. 实用的去中心化同步 (Pragmatic Decentralized Sync)
-* **Data Layer (CRDT):** 采用 **CRDT (Conflict-free Replicated Data Type)** 数据结构。无论网络如何抖动，多设备间的状态合并永远不会产生冲突。
-* **Network Layer (Overlay):** 摒弃复杂的公网 IP 和 NAT 穿透开发，推荐使用 **Tailscale / ZeroTier** 构建虚拟局域网。ContexGo 监听虚拟 IP，从而在任何网络环境下（如家 vs 咖啡馆）实现安全的 P2P 直连。
-
-### 3. 双重拒绝器 (Dual Gatekeepers)
-为了适配云端架构，系统引入了两层拦截机制：
-* **Pre-flight Gatekeeper (发送前):** **隐私与成本控制。** 拦截敏感词（如密码、身份证号），合并碎片请求，并在上下文无变化（低熵）时阻止 API 调用以节省费用。
-* **Post-flight Gatekeeper (接收后):** **质量与安全控制。** 过滤云端返回的幻觉内容、重复建议或格式错误的指令。
-
-### 4. 懒惰采样 (Lazy Sampling)
-采用 **“事件驱动 + 长间隔兜底”** 策略（>10s），仅在窗口切换或长时间活跃时捕捉快照，确保后台运行几乎零负载。
+系统设计遵循以下核心原则：
+* **从简入繁 (Progressive Complexity):** 将底层的离散输入（IO信号/屏幕信息）抽象为原子化的“状态”，进而聚合为“会话”，最终映射至长期的“目标”。
+* **管理即索引 (Management as Index):** “任务分类”是物理容器，“心理分析”是注入其中的语义灵魂。
+* **分布式一致性 (Distributed Consistency):** 利用 CRDT 与虚拟组网，在多设备环境下维护统一的工作流视图，消除物理隔阂。
 
 ---
 
-## 🧩 模块详解 (Modules)
+## 2. 核心抽象 (Core Abstractions)
+
+系统不直接管理时间，而是管理**状态 (State)**。系统设计遵循以下三层抽象模型：
+
+### L0: 信号层 (Signal Layer)
+* **定义:** 物理世界与数字交互界面的原始投影。
+* **特征:** 高频、离散、无语义、易变。
+* **组成:** 窗口句柄变化、输入设备活跃度 (HID Activity)、屏幕内容的特征向量 (Feature Vectors)。
+
+### L1: 状态层 (State Layer)
+* **定义:** 基于信号特征分类得出的原子化时间切片。
+* **特征:** 结构化、可枚举、具备基础属性（分类、投入度）。
+* **逻辑:** 通过本地规则引擎或轻量级分类算法，将 L0 信号映射为特定的 `TaskState` (e.g., `Coding`, `Meeting`, `Idle`)。这是系统进行同步和基础统计的最小单元。
+
+### L2: 认知层 (Cognitive Layer)
+* **定义:** 对连续状态流的语义解释与目标偏差分析。
+* **特征:** 语境化、长周期、具备心理侧写属性。
+* **逻辑:** 利用大模型 (LLM) 分析 L1 状态序列，识别行为模式（如“心流”、“焦虑切换”），并评估其对预设目标的贡献度。
+
+---
+
+## 3. 系统架构详解 (System Architecture)
+
+系统采用 **"本地计算核心 + 云端认知增强 + 虚拟组网同步"** 的混合架构。
 
 ### 🛡️ Module I: Sentinel (本地感知)
 *轻量化，无 GPU 依赖*
-* **Smart Monitor:** 监听窗口句柄与键鼠活跃度。
+* **Smart Monitor:** 监听窗口句柄与键鼠活跃度，采用“事件驱动”策略避免无效轮询。
 * **Local Tokenizer:**
     * **Accessibility API:** 直接读取 UI 树获取文本（VSCode 文件名, 浏览器 URL），零算力消耗。
     * **Windows OCR:** 仅在必要时调用本地离线 OCR 引擎提取图像文本。
-    * **Privacy Lock:** **原始截图在提取文本后立即内存销毁，绝不落盘，绝不上传。**
+    * **Privacy Lock:** 原始截图在提取文本后立即内存销毁，绝不落盘，绝不上传。
 
 ### ⚙️ Module II: Processing (结构化)
 * **Time Aggregator:** 将离散的采样点聚合为 5 分钟粒度的 **TimeWindow** 对象。
-* **Context Clustering:** 在本地进行初步的规则聚类（如识别 Project A vs Project B），减少发往云端的 Token 数量。
+* **Context Clustering:** 在本地进行初步的规则聚类（复刻 MineContext 算法，如识别 Project A vs Project B），减少发往云端的 Token 数量。
 
 ### 🔄 Module III: Synchronization (多端同步)
-* **Network Transport:** 依赖 **Tailscale** 提供的虚拟局域网环境，实现开箱即用的 P2P 通信。
-* **CRDT Engine:** 使用 `y-py` (Yjs) 管理分布式状态。
+* **Network Transport:** 依赖 **Tailscale** 提供的虚拟局域网环境，实现开箱即用的 P2P 通信，无需处理公网 NAT。
+* **CRDT Engine:** 使用 **y-py** (Yjs) 管理分布式状态，确保数据最终一致性。
 * **Timeline Merging:** 智能合并多设备状态。
-    * *场景:* 此时 PC (Ryzen) 处于 Idle，Laptop 处于 Coding -> 合并结果为 Coding。
+    * *场景:* 此时 PC (Ryzen) 处于 Idle，Laptop 处于 Coding -> 合并结果为 Coding（最大投入度优先）。
 
 ### ☁️ Module IV: Brain (云端大脑)
 * **Cloud Client:** 兼容 OpenAI 接口标准的客户端（支持 DeepSeek, Moonshot, ChatGPT）。
-* **Analyst:** 周期性（如每 15 分钟）发送压缩后的 JSON 摘要（**包含所有已同步设备的合并上下文**），请求云端进行深度心理推理。
+* **Analyst:** 周期性（如每 15 分钟）发送压缩后的 JSON 摘要（包含所有已同步设备的合并上下文），请求云端进行深度心理推理。
+* **Gatekeeper:** 双重熔断机制（Pre-flight 脱敏/拦截，Post-flight 幻觉过滤）。
 
 ### 🖥️ Module V: Interaction (Flet UI)
 * **Dashboard:** 可视化展示多端合并后的时间轴与云端生成的 Insight。
@@ -69,30 +74,50 @@
 
 ---
 
-## 🛠️ 技术栈 (Tech Stack)
+## 4. 初步技术选型 (Preliminary Tech Stack)
 
-| 模块 | 技术选型 | 说明 |
+| 模块 | 关键技术 | 选型理由 |
 | :--- | :--- | :--- |
-| **GUI Framework** | **Flet** | Python wrapper for Flutter，单进程高性能渲染 |
-| **Sync Engine** | **y-py (Yjs)** | 高性能 CRDT 库，处理数据合并 |
-| **Connectivity** | **Tailscale** | (推荐) 虚拟组网工具，解决 NAT/公网连接问题 |
-| **Cloud LLM** | **OpenAI SDK** | 接入 **DeepSeek-V3** (推荐) 或 GPT-4o |
-| **Local OCR** | **Windows.Media.Ocr** | 离线、免费、系统级文本提取 |
-| **Storage** | **SQLite** | 本地结构化事件存储 |
+| **Language** | **Python 3.10+** | 胶水语言，生态丰富，完美适配 AI 与 UI 开发。 |
+| **GUI Framework** | **Flet** | Python wrapper for Flutter，开发效率高，性能足够，支持原生窗口特性。 |
+| **Sync Engine** | **y-py** | 基于 Rust 的高性能 CRDT 库，工业级分布式一致性解决方案。 |
+| **Networking** | **Tailscale** | 虚拟组网工具，零配置实现 NAT 穿透与 P2P 加密通信。 |
+| **Cognitive Core** | **DeepSeek-V3** | (经由 OpenAI SDK) 极高性价比的云端推理引擎，适合高频日志分析。 |
+| **Perception** | **MSS / Win32 API** | 毫秒级屏幕差分与句柄获取，极低资源占用。 |
+| **OCR Engine** | **Windows.Media.Ocr** | 操作系统内置 OCR，离线、免费、隐私安全。 |
+| **Data Storage** | **SQLite** | 单文件结构化存储，数据主权完全在本地。 |
 
 ---
 
+## 5. 开发路线图 (Development Roadmap)
 
-## ⚠️ 隐私与安全声明
+### Phase 0: 基础设施 (Infrastructure)
+* [ ] 定义核心数据模型 (`TaskState`, `Event`)。
+* [ ] 配置 SQLite ORM 与数据库迁移。
+* [ ] **验证 Tailscale + WebSocket P2P 连通性。**
 
-1.  **数据最小化:** 云端大模型**仅能看到**经过脱敏的纯文本 JSON 摘要。
-2.  **截图本地化:** 所有的视觉数据处理均在本地内存中完成，**严禁**上传图像。
-3.  **同步安全:** Tailscale 提供基于 WireGuard 的端到端加密传输，确保设备间通信无法被窃听。
+### Phase 1: 感知与本地状态 (Sentinel & L1)
+* [ ] 实现 `WindowWatcher` (句柄) 与 `InputMonitor` (活跃度)。
+* [ ] 移植 MineContext 核心算法，实现 `Raw Events -> TimeWindow` 的聚合。
+* [ ] 输出：一个能生成本地 JSON 日志的 CLI 工具。
 
-## 🤝 贡献 (Contributing)
+### Phase 2: UI 原型 (Dashboard)
+* [ ] 搭建 Flet 主框架。
+* [ ] 实现时间轴组件可视化。
+* [ ] 实现系统托盘与后台驻留逻辑。
 
-欢迎提交 Issue 和 Pull Request。
+### Phase 3: 云端大脑 (Brain)
+* [ ] 集成 OpenAI SDK (适配 DeepSeek)。
+* [ ] 编写 Gatekeeper (去敏/拦截) 逻辑。
+* [ ] Prompt Engineering：让 AI 学会阅读 JSON 并输出心理分析。
 
-## 📄 License
+### Phase 4: 多端同步 (Sync)
+* [ ] 引入 `y-py`。
+* [ ] 将 SQLite 数据层改造为支持 CRDT 的存储层。
+* [ ] 联调多端数据合并逻辑。
 
-**GNU Affero General Public License v3.0 (AGPLv3)**
+---
+
+## 6. 协议 (License)
+
+**AGPL v3**
