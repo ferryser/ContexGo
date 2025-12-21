@@ -9,25 +9,20 @@ venv/
 
 # --- 2. ContexGo 数据持久化 (核心隔离区) ---
 # 隔离 M2 管理的物理存储，防止隐私泄露和仓库膨胀
-data/
+
 *.db
 *.db-journal
 *.sqlite3
 
 # 隔离视觉日志 (M1 生成的图片)
-**/gallery/
-**/screenshots/
+
 *.webp
 *.png
 *.jpg
 
 # --- 3. 编辑器与系统 ---
-.vscode/
-.idea/
+
 .DS_Store
 Thumbs.db
 
-# --- 4. 构建与分发 ---
-dist/
-build/
-*.egg-info/
+
