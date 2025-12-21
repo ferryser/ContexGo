@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contexgo"
+version = "0.1.0"
+description = "Attention trajectory tracking and sustainable work engine."
+requires-python = ">=3.9"
+dependencies = [
+    "pywin32",        # 窗口句柄与 Hook (perception/focus)
+    "uiautomation",   # 深度 UI 元素提取 (perception/focus)
+    "mss",            # 高性能截图 (perception/vision)
+    "pillow",         # 图像处理 (perception/vision)
+    "sqlalchemy",     # 存储网关 (sync/storage)
+    "pydantic",       # 数据协议验证 (protocol)
+    "pyyaml",         # 配置读取 (infra)
+    "loguru"          # 高信噪比日志 (infra)
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chronicle*", "sync*", "brain*", "nexus*", "infra*"]
