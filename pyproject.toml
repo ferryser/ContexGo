@@ -15,7 +15,29 @@ dependencies = [
     "sqlalchemy",     # 存储网关 (sync/storage)
     "pydantic",       # 数据协议验证 (protocol)
     "pyyaml",         # 配置读取 (infra)
-    "loguru"          # 高信噪比日志 (infra)
+    "loguru",          # 高信噪比日志 (infra)
+
+
+    "pyyaml",
+    "pandas",
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "jinja2",
+    "json-repair",
+    "ddgs",
+    "pypdf",
+    "openpyxl",
+    "chromadb",
+    "qdrant-client",
+
+    "volcengine",
+
+    "imagehash",
+    "pypdfium2>=4.30.0",
+    "python-docx>=1.0.0",
+    "python-multipart",
+    "playwright"
 ]
 
 [tool.setuptools.packages.find]
