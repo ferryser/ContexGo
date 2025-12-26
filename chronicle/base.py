@@ -15,7 +15,7 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List
 
-from opencontext.interfaces.capture_interface import ICaptureComponent
+from ContexGo.protocol.capture_interface import ICaptureComponent
 from ContexGo.protocol.context import RawContextProperties
 from ContexGo.protocol.enums import ContextSource
 from ContexGo.infra.logging_utils import get_logger
