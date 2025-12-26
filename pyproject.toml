@@ -32,7 +32,7 @@ dependencies = [
     "qdrant-client",
 
     "volcengine",
-
+    "uuid_utils",
     "imagehash",
     "pypdfium2>=4.30.0",
     "python-docx>=1.0.0",

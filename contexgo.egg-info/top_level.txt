@@ -1,5 +1,0 @@
-brain
-chronicle
-infra
-nexus
-sync

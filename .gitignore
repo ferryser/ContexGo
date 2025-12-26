@@ -1,5 +1,7 @@
 # --- 1. Python 运行环境 ---
 __pycache__/
+build/
+contexgo.egg-info/
 *.py[cod]
 *$py.class
 .venv/
