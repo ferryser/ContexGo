@@ -119,7 +119,7 @@ def install_signal_handlers(
 
 async def run() -> None:
     host = os.getenv("CONTEXGO_HOST", "127.0.0.1")
-    port = int(os.getenv("CONTEXGO_PORT", "8000"))
+    port = int(os.getenv("CONTEXGO_PORT", "35011"))
     instance_lock = acquire_instance_lock(host, port)
 
     app = build_app()
