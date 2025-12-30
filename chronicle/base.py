@@ -216,6 +216,17 @@ class BaseCaptureComponent(ICaptureComponent):
             logger.exception(f"{self._name}: Exception occurred during capture: {str(e)}")
             self._last_error = str(e)
             self._error_count += 1
+            try:
+                from ContexGo.protocol.api.schema import publish_sensor_error
+
+                publish_sensor_error(
+                    sensor_id=self._name,
+                    message="capture_failed",
+                    error=str(e),
+                    error_count=self._error_count,
+                )
+            except Exception:
+                pass
             return []
 
     def get_name(self) -> str:

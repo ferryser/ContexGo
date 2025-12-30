@@ -49,16 +49,43 @@ class SensorStatusEvent:
     timestamp: datetime
 
 
+@strawberry.type
+class SensorErrorEvent:
+    sensor_id: strawberry.ID
+    message: str
+    error: str
+    error_count: int
+    timestamp: datetime
+
+
 @dataclass
 class _Subscriber:
     queue: asyncio.Queue[SensorStatusEvent]
 
 
+@dataclass
+class _ErrorSubscriber:
+    queue: asyncio.Queue[SensorErrorEvent]
+
+
 _SENSOR_SUBSCRIBERS: List[_Subscriber] = []
+_SENSOR_ERROR_SUBSCRIBERS: List[_ErrorSubscriber] = []
 
 
 def _publish_status(event: SensorStatusEvent) -> None:
     for subscriber in list(_SENSOR_SUBSCRIBERS):
+        subscriber.queue.put_nowait(event)
+
+
+def publish_sensor_error(sensor_id: str, message: str, error: str, error_count: int) -> None:
+    event = SensorErrorEvent(
+        sensor_id=strawberry.ID(sensor_id),
+        message=message,
+        error=error,
+        error_count=error_count,
+        timestamp=datetime.utcnow(),
+    )
+    for subscriber in list(_SENSOR_ERROR_SUBSCRIBERS):
         subscriber.queue.put_nowait(event)
 
 
@@ -183,6 +210,19 @@ class Subscription:
         finally:
             if subscriber in _SENSOR_SUBSCRIBERS:
                 _SENSOR_SUBSCRIBERS.remove(subscriber)
+
+    @strawberry.subscription(name="sensorErrors")
+    async def sensor_errors(self) -> AsyncGenerator[SensorErrorEvent, None]:
+        queue: asyncio.Queue[SensorErrorEvent] = asyncio.Queue()
+        subscriber = _ErrorSubscriber(queue=queue)
+        _SENSOR_ERROR_SUBSCRIBERS.append(subscriber)
+        try:
+            while True:
+                event = await queue.get()
+                yield event
+        finally:
+            if subscriber in _SENSOR_ERROR_SUBSCRIBERS:
+                _SENSOR_ERROR_SUBSCRIBERS.remove(subscriber)
 
     @strawberry.subscription
     async def ticker(self, interval: float = 1.0) -> AsyncGenerator[int, None]:
