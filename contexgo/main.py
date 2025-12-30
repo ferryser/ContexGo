@@ -12,8 +12,8 @@ import uvicorn
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 
-from protocol.api.schema import schema
-from protocol.api.sensor_registry import list_sensors, register_sensors_from_config
+from contexgo.protocol.api.schema import schema
+from contexgo.protocol.api.sensor_registry import list_sensors, register_sensors_from_config
 
 CONTROL_QUEUE: Optional[asyncio.Queue[str]] = None
 STOP_EVENT: Optional[asyncio.Event] = None

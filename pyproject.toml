@@ -43,4 +43,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["chronicle*", "sync*", "brain*", "nexus*", "infra*"]
+include = ["contexgo*"]

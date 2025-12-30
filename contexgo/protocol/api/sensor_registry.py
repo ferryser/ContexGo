@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
-from ContexGo.chronicle.base_l1_sensor import BaseL1Sensor
-from ContexGo.chronicle.sensors.window_focus import WindowFocusSensor
+from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
+from contexgo.chronicle.sensors.window_focus import WindowFocusSensor
 
 
 @dataclass(frozen=True)

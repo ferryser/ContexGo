@@ -4,7 +4,7 @@ import uuid
 import json
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
-from ContexGo.protocol.enums import ContentFormat, ContextSource, ContextType
+from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
 
 class Chunk(BaseModel):
     """L1 物理切片基础单元"""
