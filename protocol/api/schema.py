@@ -4,8 +4,15 @@ from datetime import datetime
 from typing import AsyncGenerator, List, Optional
 
 import strawberry
+from strawberry.scalars import JSON
 
-from ContexGo.protocol.api.sensor_registry import SensorEntry, get_sensor, list_sensors
+from ContexGo.protocol.api.sensor_registry import (
+    SensorEntry,
+    create_sensor,
+    get_sensor,
+    list_sensors,
+    unregister_sensor,
+)
 
 
 @strawberry.type
@@ -49,6 +56,13 @@ class SensorStatusEvent:
     timestamp: datetime
 
 
+@strawberry.input
+class SensorRegistrationInput:
+    sensor_type: str
+    sensor_id: Optional[str] = None
+    config: Optional[JSON] = None
+
+
 @dataclass
 class _Subscriber:
     queue: asyncio.Queue[SensorStatusEvent]
@@ -75,6 +89,47 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    @strawberry.field(name="registerSensor")
+    def register_sensor(self, sensor: SensorRegistrationInput) -> SensorActionResult:
+        try:
+            entry = create_sensor(
+                sensor.sensor_type,
+                sensor_id=sensor.sensor_id,
+                config=sensor.config,
+            )
+        except Exception as exc:
+            return SensorActionResult(
+                status_code=400,
+                message="sensor registration failed",
+                error_stack=[str(exc)],
+                sensors=[],
+            )
+
+        return SensorActionResult(
+            status_code=201,
+            message="sensor registered",
+            error_stack=[],
+            sensors=[SensorNode.from_entry(entry)],
+        )
+
+    @strawberry.field(name="unregisterSensor")
+    def unregister_sensor(self, sensor_id: strawberry.ID) -> SensorActionResult:
+        sensor = unregister_sensor(str(sensor_id))
+        if sensor is None:
+            return SensorActionResult(
+                status_code=404,
+                message=f"Sensor '{sensor_id}' not found",
+                error_stack=["sensor_not_found"],
+                sensors=[],
+            )
+
+        return SensorActionResult(
+            status_code=200,
+            message="sensor unregistered",
+            error_stack=[],
+            sensors=[SensorNode.from_entry(SensorEntry(sensor_id=str(sensor_id), sensor=sensor))],
+        )
+
     @strawberry.field(name="toggleSensor")
     def toggle_sensor(self, sensor_id: strawberry.ID, enable: Optional[bool] = None) -> SensorActionResult:
         sensor = get_sensor(str(sensor_id))

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -11,9 +12,8 @@ import uvicorn
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 
-from chronicle.sensors.window_focus import WindowFocusSensor
 from protocol.api.schema import schema
-from protocol.api.sensor_registry import list_sensors, register_sensor
+from protocol.api.sensor_registry import list_sensors, register_sensors_from_config
 
 CONTROL_QUEUE: Optional[asyncio.Queue[str]] = None
 STOP_EVENT: Optional[asyncio.Event] = None
@@ -77,10 +77,23 @@ def build_app() -> FastAPI:
 
 
 def register_default_sensors() -> None:
-    sensors = [WindowFocusSensor()]
-    for sensor in sensors:
-        sensor.initialize({})
-        register_sensor(sensor)
+    config_path = os.getenv("CONTEXGO_SENSOR_CONFIG_PATH")
+    config_payload = os.getenv("CONTEXGO_SENSOR_CONFIG")
+    configs = None
+
+    if config_path:
+        with open(config_path, "r", encoding="utf-8") as handle:
+            configs = json.load(handle)
+    elif config_payload:
+        configs = json.loads(config_payload)
+
+    if not configs:
+        return
+
+    if not isinstance(configs, list):
+        raise ValueError("Sensor configuration must be a list")
+
+    register_sensors_from_config(configs)
 
 
 async def sample_sensors() -> None:
