@@ -9,6 +9,7 @@ class ContextSource(str, Enum):
     LOCAL_FILE = "local_file"
     WEB_LINK = "web_link"
     INPUT = "input"
+    WINDOW_FOCUS = "window_focus"
 
 class FileType(str, Enum):
     """File type enumeration"""
@@ -65,6 +66,7 @@ class ContextType(str, Enum):
     PROCEDURAL_CONTEXT = "procedural_context"
     STATE_CONTEXT = "state_context"
     KNOWLEDGE_CONTEXT = "knowledge_context"
+    WINDOW_FOCUS = "window_focus"
 
 class VaultType(str, Enum):
     """Document type enumeration"""
