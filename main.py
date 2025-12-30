@@ -11,7 +11,9 @@ import uvicorn
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 
+from chronicle.sensors.window_focus import WindowFocusSensor
 from protocol.api.schema import schema
+from protocol.api.sensor_registry import list_sensors, register_sensor
 
 CONTROL_QUEUE: Optional[asyncio.Queue[str]] = None
 STOP_EVENT: Optional[asyncio.Event] = None
@@ -74,7 +76,18 @@ def build_app() -> FastAPI:
     return app
 
 
+def register_default_sensors() -> None:
+    sensors = [WindowFocusSensor()]
+    for sensor in sensors:
+        sensor.initialize({})
+        register_sensor(sensor)
+
+
 async def sample_sensors() -> None:
+    for entry in list_sensors():
+        sensor = entry.sensor
+        if sensor.is_running():
+            sensor.capture()
     await asyncio.sleep(0.1)
 
 
@@ -122,6 +135,7 @@ async def run() -> None:
     port = int(os.getenv("CONTEXGO_PORT", "35011"))
     instance_lock = acquire_instance_lock(host, port)
 
+    register_default_sensors()
     app = build_app()
     config = uvicorn.Config(
         app,
