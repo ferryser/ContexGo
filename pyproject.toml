@@ -16,12 +16,13 @@ dependencies = [
     "pydantic",       # 数据协议验证 (protocol)
     "pyyaml",         # 配置读取 (infra)
     "loguru",          # 高信噪比日志 (infra)
-
-
-    "pyyaml",
     "pandas",
     "fastapi",
     "uvicorn",
+    "strawberry-graphql[fastapi]",
+    "flet",
+    "httpx",
+    "websockets",
     "openai",
     "jinja2",
     "json-repair",
