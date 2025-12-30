@@ -6,10 +6,10 @@ import uuid_utils as uuid # 采用具备时间序的 v7 算法
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from ContexGo.chronicle.base import BaseCaptureComponent
-from ContexGo.protocol.context import RawContextProperties
-from ContexGo.protocol.enums import ContentFormat, ContextSource, ContextType
-from ContexGo.infra.logging_utils import get_logger
+from contexgo.chronicle.base import BaseCaptureComponent
+from contexgo.protocol.context import RawContextProperties
+from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
+from contexgo.infra.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

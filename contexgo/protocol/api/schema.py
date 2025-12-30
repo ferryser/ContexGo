@@ -6,7 +6,7 @@ from typing import AsyncGenerator, List, Optional
 import strawberry
 from strawberry.scalars import JSON
 
-from ContexGo.protocol.api.sensor_registry import (
+from contexgo.protocol.api.sensor_registry import (
     SensorEntry,
     create_sensor,
     get_sensor,

@@ -6,11 +6,11 @@ import importlib.util
 from ctypes import wintypes
 from typing import Any, Dict, List, Optional
 
-from ContexGo.chronicle.base_l1_sensor import BaseL1Sensor
-from ContexGo.chronicle.assembly.event_gate import save_raw_context
-from ContexGo.infra.config import get_sys_type, is_test_mode
-from ContexGo.infra.logging_utils import get_logger, setup_logging
-from ContexGo.protocol.enums import ContentFormat, ContextSource, ContextType
+from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
+from contexgo.chronicle.assembly.event_gate import save_raw_context
+from contexgo.infra.config import get_sys_type, is_test_mode
+from contexgo.infra.logging_utils import get_logger, setup_logging
+from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
 
 setup_logging({"log_path": "data/logs/window_focus.log"})
 logger = get_logger(__name__)

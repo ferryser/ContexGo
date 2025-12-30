@@ -11,8 +11,8 @@ set "GRAPHQL_WS_URL=ws://localhost:35011/graphql"
 
 netstat -ano | findstr /R /C:":35011 .*LISTENING" >nul
 if errorlevel 1 (
-    echo [INFO] Backend not running. Starting main.py...
-    start "ContexGo Backend" /B python main.py
+    echo [INFO] Backend not running. Starting contexgo.main...
+    start "ContexGo Backend" /B python -m contexgo.main
     timeout /t 2 >nul
 ) else (
     echo [INFO] Backend already running on port 35011.

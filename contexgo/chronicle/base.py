@@ -15,10 +15,10 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List
 
-from ContexGo.protocol.capture_interface import ICaptureComponent
-from ContexGo.protocol.context import RawContextProperties
-from ContexGo.protocol.enums import ContextSource
-from ContexGo.infra.logging_utils import get_logger
+from contexgo.protocol.capture_interface import ICaptureComponent
+from contexgo.protocol.context import RawContextProperties
+from contexgo.protocol.enums import ContextSource
+from contexgo.infra.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -217,7 +217,7 @@ class BaseCaptureComponent(ICaptureComponent):
             self._last_error = str(e)
             self._error_count += 1
             try:
-                from ContexGo.protocol.api.schema import publish_sensor_error
+                from contexgo.protocol.api.schema import publish_sensor_error
 
                 publish_sensor_error(
                     sensor_id=self._name,

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from ContexGo.protocol.context import RawContextProperties
+from contexgo.protocol.context import RawContextProperties
 
 
 BASE_EVENT_PATH = Path("data") / "chronicle" / "event"

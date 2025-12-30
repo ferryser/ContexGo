@@ -22,6 +22,6 @@
     7.2  总体设计tips.md    # 架构设计决策记录
 8.  .gitignore             # Git 忽略配置：已确保 data/ 不会被上传
 9.  LICENSE                # 项目授权协议
-10. main.py                # 组装底板：程序的启动入口，负责挂载各模块积木
+10. contexgo/main.py        # 组装底板：程序的启动入口，负责挂载各模块积木
 11. pyproject.toml         # 包管理配置：定义项目依赖与模块化安装范式
 12. README.md              # 项目愿景与核心逻辑说明
