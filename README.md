@@ -118,6 +118,23 @@
 
 ---
 
-## 6. 协议 (License)
+## 6. 传感器测试 UI (Sensor Test UI)
+
+在 Windows 下可通过双击脚本启动传感器测试界面，脚本会在需要时先启动后端服务（`main.py`），再启动 UI：
+
+1. 安装依赖（推荐在虚拟环境内执行）：
+   ```bash
+   python -m pip install -e .
+   ```
+2. 双击运行：
+   ```
+   nexus/test_sensor/run_ui.bat
+   ```
+
+> 若希望手动启动：
+> - 后端：`python main.py`
+> - UI：`python -m nexus.test_sensor` 或 `python nexus/test_sensor/app.py`
+
+## 7. 协议 (License)
 
 **apache 2.0**
