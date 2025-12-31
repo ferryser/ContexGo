@@ -6,15 +6,15 @@ from typing import Any, Iterable, Optional
 
 
 class BaseChronicle(abc.ABC):
-    """Chronicle 抽象协议：统一本地 CRUD 与 GraphQL Resolver 适配接口。"""
+    """Chronicle 抽象协议：纯增量写入与查询接口。"""
 
     @abc.abstractmethod
-    async def create(self, payload: Any) -> Any:
-        """Create a chronicle record."""
+    async def append(self, payload: Any) -> Any:
+        """Append a chronicle record."""
 
     @abc.abstractmethod
-    async def read_by_id(self, object_id: str) -> Optional[Any]:
-        """Read a chronicle record by object id."""
+    async def append_many(self, payloads: Iterable[Any]) -> Iterable[Any]:
+        """Append chronicle records in batch."""
 
     @abc.abstractmethod
     async def read_by_time_range(
@@ -23,16 +23,16 @@ class BaseChronicle(abc.ABC):
         """Read chronicle records by time range (timestamp seconds)."""
 
     @abc.abstractmethod
-    async def read_by_type(self, context_type: str) -> Iterable[Any]:
-        """Read chronicle records by type."""
+    async def read_by_id(self, object_id: str) -> Optional[Any]:
+        """Read a chronicle record by object id."""
 
     @abc.abstractmethod
-    async def update(self, object_id: str, payload: Any) -> Any:
-        """Update chronicle record."""
+    async def read_by_source(self, source: str) -> Iterable[Any]:
+        """Read chronicle records by source."""
 
     @abc.abstractmethod
-    async def delete(self, object_id: str) -> bool:
-        """Delete chronicle record."""
+    async def flush(self) -> None:
+        """Force flush buffered writes."""
 
     async def gql_query_by_id(self, info: Any, object_id: str) -> Optional[Any]:
         """GraphQL resolver-compatible query entry."""
