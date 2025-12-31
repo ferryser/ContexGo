@@ -13,7 +13,8 @@ from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 
 from contexgo.protocol.api.schema import schema
-from contexgo.protocol.api.sensor_registry import list_sensors, register_sensors_from_config
+from contexgo.chronicle.assembly.sensor_manager import SensorManager
+from contexgo.protocol.api.sensor_registry import register_sensors_from_config
 
 CONTROL_QUEUE: Optional[asyncio.Queue[str]] = None
 STOP_EVENT: Optional[asyncio.Event] = None
@@ -96,11 +97,19 @@ def register_default_sensors() -> None:
     register_sensors_from_config(configs)
 
 
+_SENSOR_MANAGER: Optional[SensorManager] = None
+
+
+def _get_sensor_manager() -> SensorManager:
+    global _SENSOR_MANAGER
+    if _SENSOR_MANAGER is None:
+        _SENSOR_MANAGER = SensorManager()
+    return _SENSOR_MANAGER
+
+
 async def sample_sensors() -> None:
-    for entry in list_sensors():
-        sensor = entry.sensor
-        if sensor.is_running():
-            sensor.capture()
+    manager = _get_sensor_manager()
+    await manager.sample_all()
     await asyncio.sleep(0.1)
 
 

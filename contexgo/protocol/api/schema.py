@@ -25,6 +25,10 @@ class SensorNode:
     last_error: Optional[str]
     error_count: int
 
+    @strawberry.field(name="isOn")
+    def is_on(self) -> bool:
+        return self.running
+
     @staticmethod
     def from_entry(entry: SensorEntry) -> "SensorNode":
         sensor = entry.sensor
