@@ -7,7 +7,6 @@ from ctypes import wintypes
 from typing import Any, Dict, List, Optional
 
 from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
-from contexgo.chronicle.assembly.event_gate import save_raw_context
 from contexgo.infra.config import get_sys_type, is_test_mode
 from contexgo.infra.logging_utils import get_logger, setup_logging
 from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
@@ -45,12 +44,6 @@ class WindowFocusSensor(BaseL1Sensor):
 
         logger.info("WindowFocusSensor initialized for Windows foreground window polling")
         return True
-
-    def _capture_impl(self) -> List[Any]:
-        raw_payloads = super()._capture_impl()
-        for raw in raw_payloads:
-            save_raw_context(raw)
-        return raw_payloads
 
     def _collect_l1_payloads(self) -> List[Dict[str, Any]]:
         if not self._is_windows:
