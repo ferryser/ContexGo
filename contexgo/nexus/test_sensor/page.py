@@ -23,17 +23,22 @@ query Sensors {
 TOGGLE_SENSOR_MUTATION = """
 mutation ToggleSensor($id: ID!, $enabled: Boolean!) {
   toggleSensor(id: $id, enabled: $enabled) {
-    id
-    isOn
+    statusCode
+    message
+    sensors {
+      id
+      isOn
+    }
   }
 }
 """
 
 SENSOR_STATUS_SUBSCRIPTION = """
 subscription SensorStatus {
-  sensorStatusChanged {
-    id
-    isOn
+  sensorStatus {
+    sensorId
+    status
+    message
   }
 }
 """
@@ -93,12 +98,14 @@ class SensorDashboard:
 
     async def subscribe_updates(self) -> None:
         async for payload in self.client.subscribe(SENSOR_STATUS_SUBSCRIPTION):
-            update = payload.get("data", {}).get("sensorStatusChanged")
+            update = payload.get("data", {}).get("sensorStatus")
             if not update:
                 continue
-            sensor_id = str(update.get("id"))
-            is_on = bool(update.get("isOn"))
-            self._apply_state(sensor_id, is_on)
+            sensor_id = str(update.get("sensorId"))
+            status = str(update.get("status", ""))
+            message = str(update.get("message", ""))
+            is_on = status.lower() == "running"
+            self._apply_state(sensor_id, is_on, message=message)
 
     async def _handle_toggle(self, sensor_id: str, enabled: bool) -> None:
         try:
@@ -110,12 +117,15 @@ class SensorDashboard:
             self._status.value = f"开关请求失败: {exc}"
             self.page.update()
 
-    def _apply_state(self, sensor_id: str, is_on: bool) -> None:
+    def _apply_state(self, sensor_id: str, is_on: bool, *, message: str = "") -> None:
         switch = self._switches.get(sensor_id)
         if switch is None:
             return
         switch.set_state(is_on)
-        self._status.value = f"传感器 {switch.model.name} 状态已更新。"
+        if message:
+            self._status.value = f"传感器 {switch.model.name}: {message}"
+        else:
+            self._status.value = f"传感器 {switch.model.name} 状态已更新。"
         self.page.update()
 
     def _handle_all_on_click(self, _: ft.ControlEvent) -> None:
