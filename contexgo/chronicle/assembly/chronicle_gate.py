@@ -4,72 +4,123 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import random
+import sqlite3
+import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from contexgo.protocol.base_chronicle import BaseChronicle
 from contexgo.protocol.context import RawContextProperties
 
-
 BASE_CHRONICLE_PATH = Path("data") / "chronicle"
-EVENT_DIR = "event"
-META_DIR = "metadata"
-BLOB_DIR = "blob"
+BLOB_DIR_NAME = "blobs"
+TABLE_NAME = "chronicle"
 
-
-def _json_default(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
+SCHEMA_SQL = f"""
+CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+    id TEXT PRIMARY KEY,
+    timestamp REAL NOT NULL,
+    source TEXT,
+    content TEXT,
+    blob_path TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_chronicle_timestamp ON {TABLE_NAME}(timestamp);
+CREATE INDEX IF NOT EXISTS idx_chronicle_source ON {TABLE_NAME}(source);
+"""
 
 
 def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def _resolve_date_bucket(base_path: Path, create_time: Optional[datetime]) -> Path:
-    event_time = create_time or datetime.now()
-    date_bucket = event_time.strftime("%Y-%m-%d")
-    return base_path / date_bucket
+def _normalize_timestamp(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.timestamp()
+    if isinstance(value, str):
+        with contextlib.suppress(ValueError):
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.timestamp()
+        with contextlib.suppress(ValueError):
+            return float(value)
+    return time.time()
 
 
-def _resolve_event_path(
-    base_path: Path, object_id: str, create_time: Optional[datetime] = None
-) -> Path:
-    event_dir = _resolve_date_bucket(base_path, create_time)
-    _ensure_dir(event_dir)
-    return event_dir / f"{object_id}.jsonl"
+def _uuid7() -> str:
+    timestamp_ms = int(time.time() * 1000) & ((1 << 48) - 1)
+    rand_a = random.getrandbits(12)
+    rand_b = random.getrandbits(62)
+    uuid_int = (timestamp_ms << 80) | (0x7 << 76) | (rand_a << 64)
+    uuid_int |= (0x2 << 62) | rand_b
+    return str(uuid.UUID(int=uuid_int))
 
 
-def _resolve_metadata_path(
-    base_path: Path, object_id: str, create_time: Optional[datetime] = None
-) -> Path:
-    metadata_dir = _resolve_date_bucket(base_path, create_time)
-    _ensure_dir(metadata_dir)
-    return metadata_dir / f"{object_id}.json"
+def _resolve_month_db_path(base_path: Path, ts: float) -> Path:
+    dt = datetime.fromtimestamp(ts)
+    year = dt.strftime("%Y")
+    month = dt.strftime("%m")
+    return base_path / year / f"{year}{month}.db"
 
 
-def _resolve_blob_path(
-    base_path: Path, object_id: str, extension: str, create_time: Optional[datetime] = None
-) -> Path:
-    blob_dir = _resolve_date_bucket(base_path, create_time)
+def _resolve_blob_path(base_path: Path, ts: float, object_id: str, extension: str) -> Path:
+    dt = datetime.fromtimestamp(ts)
+    year = dt.strftime("%Y")
+    day_bucket = dt.strftime("%m-%d")
+    blob_dir = base_path / year / BLOB_DIR_NAME / day_bucket
     _ensure_dir(blob_dir)
-    safe_ext = extension.lstrip(".") if extension else "bin"
+    safe_ext = extension.lstrip(".") if extension else "jpg"
     return blob_dir / f"{object_id}.{safe_ext}"
 
 
+def initialize_chronicle_db(db_path: Path) -> None:
+    _ensure_dir(db_path.parent)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.executescript(SCHEMA_SQL)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _serialize_content(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, (dict, list)):
+        return json.dumps(content, ensure_ascii=False)
+    return str(content)
+
+
+_DEFAULT_GATE: Optional["ChronicleGate"] = None
+
+
+def _get_default_gate(base_path: Optional[Path] = None) -> "ChronicleGate":
+    global _DEFAULT_GATE
+    target_base = base_path or BASE_CHRONICLE_PATH
+    if _DEFAULT_GATE is None or _DEFAULT_GATE._base_path != target_base:
+        _DEFAULT_GATE = ChronicleGate(base_path=target_base)
+    return _DEFAULT_GATE
+
+
 def save_event(event: Dict[str, Any], base_path: Optional[Path] = None) -> Path:
-    base = base_path or (BASE_CHRONICLE_PATH / EVENT_DIR)
-    object_id = event.get("object_id") or str(uuid.uuid4())
-    create_time = _parse_create_time(event.get("create_time"))
-    event_path = _resolve_event_path(base, object_id, create_time=create_time)
-    with event_path.open("w", encoding="utf-8") as handle:
-        handle.write(json.dumps(event, ensure_ascii=False, default=_json_default))
-        handle.write("\n")
-    return event_path
+    gate = _get_default_gate(base_path)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(gate.append(event))
+        return Path()
+    loop.create_task(gate.append(event))
+    return Path()
 
 
 def save_raw_context(raw: RawContextProperties, base_path: Optional[Path] = None) -> Path:
@@ -77,122 +128,80 @@ def save_raw_context(raw: RawContextProperties, base_path: Optional[Path] = None
         payload = raw.model_dump()
     else:
         payload = raw.dict()  # type: ignore[call-arg]
-    payload.setdefault("object_id", raw.object_id)
-    payload.setdefault("create_time", raw.create_time)
+    payload.setdefault("source", payload.get("context_type"))
+    payload.setdefault("timestamp", payload.get("create_time"))
     return save_event(payload, base_path=base_path)
 
 
-def _parse_create_time(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-    return None
-
-
 @dataclass
-class BlobPayload:
-    payload: Dict[str, Any]
-    blob_bytes: bytes
-    blob_extension: str
+class ChronicleRecord:
+    object_id: str
+    timestamp: float
+    source: Optional[str]
+    content: str
+    blob_path: Optional[str]
 
 
 class ChronicleGate(BaseChronicle):
-    """Chronicle gate with async CRUD and GraphQL-ready adapters."""
+    """Chronicle gate with async batch insert and month routing."""
 
-    def __init__(self, base_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        base_path: Optional[Path] = None,
+        flush_interval: float = 2.0,
+        max_batch_size: int = 200,
+    ) -> None:
         self._base_path = base_path or BASE_CHRONICLE_PATH
-        self._event_base = self._base_path / EVENT_DIR
-        self._metadata_base = self._base_path / META_DIR
-        self._blob_base = self._base_path / BLOB_DIR
         self._queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
         self._writer_task: Optional[asyncio.Task[None]] = None
+        self._flush_interval = max(1.0, min(flush_interval, 5.0))
+        self._max_batch_size = max(1, max_batch_size)
+        self._connections: Dict[Path, sqlite3.Connection] = {}
 
-    async def create(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        if self._is_event(payload):
-            await self._enqueue_event(payload)
-            return payload
-        await self._write_metadata(payload)
+    async def append(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        self._ensure_writer_task()
+        payload.setdefault("id", _uuid7())
+        payload.setdefault(
+            "timestamp",
+            _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
+        )
+        await self._queue.put(payload)
         return payload
 
+    async def append_many(self, payloads: Iterable[Dict[str, Any]]) -> Iterable[Dict[str, Any]]:
+        self._ensure_writer_task()
+        for payload in payloads:
+            payload.setdefault("id", _uuid7())
+            payload.setdefault(
+                "timestamp",
+                _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
+            )
+            await self._queue.put(payload)
+        return payloads
+
     async def read_by_id(self, object_id: str) -> Optional[Dict[str, Any]]:
-        for file_path in self._iter_event_files():
-            if file_path.stem == object_id:
-                return self._load_json(file_path)
-        for file_path in self._iter_metadata_files():
-            if file_path.stem == object_id:
-                return self._load_json(file_path)
-        return None
+        return await asyncio.to_thread(self._read_by_id_sync, object_id)
 
     async def read_by_time_range(
         self, start_ts: float, end_ts: float
     ) -> Iterable[Dict[str, Any]]:
-        results: list[Dict[str, Any]] = []
-        start_time = datetime.fromtimestamp(start_ts)
-        end_time = datetime.fromtimestamp(end_ts)
-        for file_path in self._iter_event_files():
-            record = self._load_json(file_path)
-            if self._is_time_in_range(record, start_time, end_time):
-                results.append(record)
-        for file_path in self._iter_metadata_files():
-            record = self._load_json(file_path)
-            if self._is_time_in_range(record, start_time, end_time):
-                results.append(record)
-        return results
+        return await asyncio.to_thread(self._read_by_time_range_sync, start_ts, end_ts)
 
-    async def read_by_type(self, context_type: str) -> Iterable[Dict[str, Any]]:
-        results: list[Dict[str, Any]] = []
-        for file_path in self._iter_event_files():
-            record = self._load_json(file_path)
-            if self._record_matches_type(record, context_type):
-                results.append(record)
-        for file_path in self._iter_metadata_files():
-            record = self._load_json(file_path)
-            if self._record_matches_type(record, context_type):
-                results.append(record)
-        return results
+    async def read_by_source(self, source: str) -> Iterable[Dict[str, Any]]:
+        return await asyncio.to_thread(self._read_by_source_sync, source)
 
-    async def update(self, object_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        payload = payload.copy()
-        payload["object_id"] = object_id
-        if self._is_event(payload):
-            await self._enqueue_event(payload)
-            return payload
-        await self._write_metadata(payload)
-        return payload
-
-    async def delete(self, object_id: str) -> bool:
-        deleted = False
-        for file_path in list(self._iter_event_files()):
-            if file_path.stem == object_id:
-                file_path.unlink(missing_ok=True)
-                deleted = True
-        for file_path in list(self._iter_metadata_files()):
-            if file_path.stem == object_id:
-                file_path.unlink(missing_ok=True)
-                deleted = True
-        for file_path in list(self._iter_blob_files()):
-            if file_path.stem == object_id:
-                file_path.unlink(missing_ok=True)
-                deleted = True
-        return deleted
+    async def flush(self) -> None:
+        await self._queue.join()
 
     async def shutdown(self) -> None:
+        await self.flush()
         if self._writer_task and not self._writer_task.done():
             self._writer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._writer_task
-
-    def _is_event(self, payload: Dict[str, Any]) -> bool:
-        content_type = payload.get("content_type") or payload.get("context_type")
-        return str(content_type).lower() == "event"
-
-    async def _enqueue_event(self, payload: Dict[str, Any]) -> None:
-        self._ensure_writer_task()
-        await self._queue.put(payload)
+        for conn in self._connections.values():
+            conn.close()
+        self._connections.clear()
 
     def _ensure_writer_task(self) -> None:
         if self._writer_task and not self._writer_task.done():
@@ -203,93 +212,173 @@ class ChronicleGate(BaseChronicle):
     async def _writer_loop(self) -> None:
         while True:
             payload = await self._queue.get()
+            batch = [payload]
+            start_time = asyncio.get_running_loop().time()
+            while len(batch) < self._max_batch_size:
+                remaining = self._flush_interval - (
+                    asyncio.get_running_loop().time() - start_time
+                )
+                if remaining <= 0:
+                    break
+                try:
+                    item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    break
+                batch.append(item)
             try:
-                self._write_event(payload)
+                self._write_batch(batch)
             finally:
-                self._queue.task_done()
+                for _ in batch:
+                    self._queue.task_done()
 
-    def _write_event(self, payload: Dict[str, Any]) -> Path:
-        blob_payload = self._extract_blob(payload)
-        if blob_payload:
-            payload = blob_payload.payload
-            payload["content_path"] = self._write_blob(blob_payload)
-        return save_event(payload, base_path=self._event_base)
+    def _write_batch(self, batch: List[Dict[str, Any]]) -> None:
+        grouped: Dict[Path, List[ChronicleRecord]] = {}
+        for payload in batch:
+            record = self._prepare_record(payload)
+            db_path = _resolve_month_db_path(self._base_path, record.timestamp)
+            grouped.setdefault(db_path, []).append(record)
 
-    async def _write_metadata(self, payload: Dict[str, Any]) -> Path:
-        blob_payload = self._extract_blob(payload)
-        if blob_payload:
-            payload = blob_payload.payload
-            payload["content_path"] = self._write_blob(blob_payload)
-        object_id = payload.get("object_id") or str(uuid.uuid4())
-        payload["object_id"] = object_id
-        create_time = _parse_create_time(payload.get("create_time"))
-        metadata_path = _resolve_metadata_path(
-            self._metadata_base, object_id, create_time=create_time
+        for db_path, records in grouped.items():
+            conn = self._get_connection(db_path)
+            cursor = conn.cursor()
+            cursor.execute("BEGIN")
+            cursor.executemany(
+                f"""
+                INSERT INTO {TABLE_NAME} (id, timestamp, source, content, blob_path)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        record.object_id,
+                        record.timestamp,
+                        record.source,
+                        record.content,
+                        record.blob_path,
+                    )
+                    for record in records
+                ],
+            )
+            conn.commit()
+
+    def _prepare_record(self, payload: Dict[str, Any]) -> ChronicleRecord:
+        object_id = payload.get("id") or payload.get("object_id") or _uuid7()
+        timestamp = _normalize_timestamp(payload.get("timestamp") or payload.get("create_time"))
+        source = payload.get("source") or payload.get("context_type")
+        content = _serialize_content(payload.get("content") or payload.get("content_text"))
+
+        blob_path = None
+        blob_bytes = payload.get("blob_bytes") or payload.get("content_bytes")
+        if isinstance(blob_bytes, (bytes, bytearray)):
+            extension = payload.get("blob_ext") or payload.get("content_ext") or "jpg"
+            blob_path = self._write_blob(timestamp, object_id, bytes(blob_bytes), extension)
+        return ChronicleRecord(
+            object_id=str(object_id),
+            timestamp=timestamp,
+            source=str(source) if source is not None else None,
+            content=content,
+            blob_path=blob_path,
         )
-        with metadata_path.open("w", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False, default=_json_default))
-        return metadata_path
 
-    def _write_blob(self, blob_payload: BlobPayload) -> str:
-        object_id = blob_payload.payload.get("object_id") or str(uuid.uuid4())
-        blob_payload.payload["object_id"] = object_id
-        create_time = _parse_create_time(blob_payload.payload.get("create_time"))
-        blob_path = _resolve_blob_path(
-            self._blob_base,
-            object_id,
-            blob_payload.blob_extension,
-            create_time=create_time,
-        )
+    def _write_blob(self, timestamp: float, object_id: str, data: bytes, extension: str) -> str:
+        blob_path = _resolve_blob_path(self._base_path, timestamp, object_id, extension)
         with blob_path.open("wb") as handle:
-            handle.write(blob_payload.blob_bytes)
-        return str(blob_path)
+            handle.write(data)
+        rel_path = blob_path.relative_to(self._base_path)
+        return str(rel_path)
 
-    def _extract_blob(self, payload: Dict[str, Any]) -> Optional[BlobPayload]:
-        if "content_bytes" not in payload:
-            return None
-        blob_bytes = payload.get("content_bytes")
-        if not isinstance(blob_bytes, (bytes, bytearray)):
-            return None
-        extension = payload.get("content_ext") or payload.get("content_type") or "bin"
-        safe_payload = payload.copy()
-        safe_payload.pop("content_bytes", None)
-        safe_payload.pop("content_ext", None)
-        return BlobPayload(
-            payload=safe_payload,
-            blob_bytes=bytes(blob_bytes),
-            blob_extension=str(extension),
-        )
+    def _get_connection(self, db_path: Path) -> sqlite3.Connection:
+        if db_path in self._connections:
+            return self._connections[db_path]
+        initialize_chronicle_db(db_path)
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        self._connections[db_path] = conn
+        return conn
 
-    def _iter_event_files(self) -> Iterable[Path]:
-        if not self._event_base.exists():
+    def _read_by_id_sync(self, object_id: str) -> Optional[Dict[str, Any]]:
+        for db_path in self._iter_db_paths():
+            conn = sqlite3.connect(db_path)
+            try:
+                row = conn.execute(
+                    f"SELECT id, timestamp, source, content, blob_path FROM {TABLE_NAME} WHERE id = ?",
+                    (object_id,),
+                ).fetchone()
+            finally:
+                conn.close()
+            if row:
+                return self._row_to_payload(row)
+        return None
+
+    def _read_by_time_range_sync(self, start_ts: float, end_ts: float) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        for db_path in self._iter_db_paths_in_range(start_ts, end_ts):
+            conn = sqlite3.connect(db_path)
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT id, timestamp, source, content, blob_path
+                    FROM {TABLE_NAME}
+                    WHERE timestamp BETWEEN ? AND ?
+                    ORDER BY timestamp ASC
+                    """,
+                    (start_ts, end_ts),
+                ).fetchall()
+            finally:
+                conn.close()
+            results.extend(self._row_to_payload(row) for row in rows)
+        return results
+
+    def _read_by_source_sync(self, source: str) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        for db_path in self._iter_db_paths():
+            conn = sqlite3.connect(db_path)
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT id, timestamp, source, content, blob_path
+                    FROM {TABLE_NAME}
+                    WHERE source = ?
+                    ORDER BY timestamp ASC
+                    """,
+                    (source,),
+                ).fetchall()
+            finally:
+                conn.close()
+            results.extend(self._row_to_payload(row) for row in rows)
+        return results
+
+    def _iter_db_paths(self) -> Iterable[Path]:
+        if not self._base_path.exists():
             return []
-        return self._event_base.glob("**/*.jsonl")
+        db_paths: List[Path] = []
+        for year_dir in self._base_path.iterdir():
+            if not year_dir.is_dir():
+                continue
+            db_paths.extend(sorted(year_dir.glob("*.db")))
+        return db_paths
 
-    def _iter_metadata_files(self) -> Iterable[Path]:
-        if not self._metadata_base.exists():
-            return []
-        return self._metadata_base.glob("**/*.json")
-
-    def _iter_blob_files(self) -> Iterable[Path]:
-        if not self._blob_base.exists():
-            return []
-        return self._blob_base.glob("**/*.*")
-
-    def _load_json(self, file_path: Path) -> Dict[str, Any]:
-        with file_path.open("r", encoding="utf-8") as handle:
-            line = handle.readline()
-            return json.loads(line) if line else {}
+    def _iter_db_paths_in_range(self, start_ts: float, end_ts: float) -> Iterable[Path]:
+        start_dt = datetime.fromtimestamp(start_ts)
+        end_dt = datetime.fromtimestamp(end_ts)
+        current = datetime(start_dt.year, start_dt.month, 1)
+        end_marker = datetime(end_dt.year, end_dt.month, 1)
+        db_paths: List[Path] = []
+        while current <= end_marker:
+            ts = current.timestamp()
+            db_paths.append(_resolve_month_db_path(self._base_path, ts))
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1)
+            else:
+                current = datetime(current.year, current.month + 1, 1)
+        return [path for path in db_paths if path.exists()]
 
     @staticmethod
-    def _record_matches_type(record: Dict[str, Any], context_type: str) -> bool:
-        record_type = record.get("context_type") or record.get("content_type")
-        return str(record_type).lower() == str(context_type).lower()
-
-    @staticmethod
-    def _is_time_in_range(
-        record: Dict[str, Any], start_time: datetime, end_time: datetime
-    ) -> bool:
-        create_time = _parse_create_time(record.get("create_time"))
-        if not create_time:
-            return False
-        return start_time <= create_time <= end_time
+    def _row_to_payload(row: sqlite3.Row | tuple) -> Dict[str, Any]:
+        return {
+            "id": row[0],
+            "timestamp": row[1],
+            "source": row[2],
+            "content": row[3],
+            "blob_path": row[4],
+        }
