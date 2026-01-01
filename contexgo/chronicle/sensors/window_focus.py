@@ -8,10 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
 from contexgo.infra.config import get_sys_type, is_test_mode
-from contexgo.infra.logging_utils import get_logger, setup_logging
+from contexgo.infra.logging_utils import build_log_config, get_logger, setup_logging
 from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
 
-setup_logging({"log_path": "data/logs/window_focus.log"})
+setup_logging(build_log_config(__file__))
 logger = get_logger(__name__)
 
 
