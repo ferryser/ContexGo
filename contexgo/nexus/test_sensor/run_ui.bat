@@ -12,6 +12,7 @@ set "REPO_ROOT=%SCRIPT_DIR%\..\.."
 
 pushd "%REPO_ROOT%" >nul
 
+set "PYTHONPATH=%REPO_ROOT%;%PYTHONPATH%"
 
 
 set "GRAPHQL_HTTP_URL=http://localhost:35011/graphql"

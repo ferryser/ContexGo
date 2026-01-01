@@ -9,6 +9,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+repo_root_str = str(REPO_ROOT)
+if repo_root_str not in sys.path:
+    sys.path.insert(0, repo_root_str)
+existing_pythonpath = os.environ.get("PYTHONPATH", "")
+if existing_pythonpath:
+    os.environ["PYTHONPATH"] = f"{repo_root_str}{os.pathsep}{existing_pythonpath}"
+else:
+    os.environ["PYTHONPATH"] = repo_root_str
+
 import uvicorn
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
