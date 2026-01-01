@@ -53,6 +53,7 @@ class BaseCaptureComponent(ICaptureComponent):
         self._error_count = 0
         self._last_error = None
         self._lock = threading.RLock()
+        self._global_config: Dict[str, Any] = {}
 
     def initialize(self, config: Dict[str, Any]) -> bool:
         """
@@ -415,6 +416,16 @@ class BaseCaptureComponent(ICaptureComponent):
                     f"{self._name}: Exception occurred during callback function setup: {str(e)}"
                 )
                 return False
+
+    def apply_global_config(self, config: Dict[str, Any]) -> None:
+        """
+        Apply global configuration shared across sensors.
+
+        Args:
+            config (Dict[str, Any]): Global configuration payload.
+        """
+        with self._lock:
+            self._global_config = config.copy()
 
     def _capture_loop(self):
         """

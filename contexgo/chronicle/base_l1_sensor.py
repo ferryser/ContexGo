@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from contexgo.chronicle.base import BaseCaptureComponent
+from contexgo.chronicle.assembly.chronicle_gate import save_raw_context
 from contexgo.protocol.context import RawContextProperties
 from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
 from contexgo.infra.logging_utils import get_logger
@@ -88,6 +89,8 @@ class BaseL1Sensor(BaseCaptureComponent):
                 content_text=json.dumps(l1_event, ensure_ascii=False),
                 create_time=now_dt
             ))
+        for raw in results:
+            save_raw_context(raw)
         return results
 
     @abc.abstractmethod
