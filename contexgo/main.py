@@ -159,13 +159,22 @@ def _parse_sensor_configs(payload: Any) -> Tuple[List[Dict[str, Any]], Dict[str,
     raise ValueError("Sensor configuration must be a list or object")
 
 
-def _log_missing_script(path: Path) -> None:
+def _log_missing_script(path: Path, config: Optional[Dict[str, Any]] = None) -> None:
     now = time.time()
-    last = _SCRIPT_LOG_TIMES.get(str(path), 0.0)
+    log_key = str(path)
+    last = _SCRIPT_LOG_TIMES.get(log_key, 0.0)
     if now - last < 600:
         return
-    _SCRIPT_LOG_TIMES[str(path)] = now
-    logger.warning("Sensor script missing: %s", path.as_posix())
+    _SCRIPT_LOG_TIMES[log_key] = now
+    if config:
+        logger.warning(
+            "Sensor script missing: {} (sensor_type={}, sensor_id={})",
+            path.as_posix(),
+            config.get("sensor_type"),
+            config.get("sensor_id"),
+        )
+    else:
+        logger.warning("Sensor script missing: {}", path.as_posix())
 
 
 def _filter_configs(configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -178,7 +187,7 @@ def _filter_configs(configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if script_path:
             script = Path(str(script_path))
             if not script.exists():
-                _log_missing_script(script)
+                _log_missing_script(script, config=item)
                 continue
         sensor_type = item.get("sensor_type")
         if not sensor_type:
