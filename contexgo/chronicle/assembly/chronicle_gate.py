@@ -117,7 +117,12 @@ def save_event(event: Dict[str, Any], base_path: Optional[Path] = None) -> Path:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        asyncio.run(gate.append(event))
+        temp_gate = ChronicleGate(base_path=base_path or BASE_CHRONICLE_PATH)
+        payload = temp_gate._prepare_payload(dict(event))
+        try:
+            temp_gate._write_batch([payload])
+        finally:
+            temp_gate._close_connections()
         return Path()
     loop.create_task(gate.append(event))
     return Path()
@@ -167,22 +172,14 @@ class ChronicleGate(BaseChronicle):
 
     async def append(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         self._ensure_writer_task()
-        payload.setdefault("id", _uuid7())
-        payload.setdefault(
-            "timestamp",
-            _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
-        )
+        payload = self._prepare_payload(payload)
         await self._queue.put(payload)
         return payload
 
     async def append_many(self, payloads: Iterable[Dict[str, Any]]) -> Iterable[Dict[str, Any]]:
         self._ensure_writer_task()
         for payload in payloads:
-            payload.setdefault("id", _uuid7())
-            payload.setdefault(
-                "timestamp",
-                _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
-            )
+            payload = self._prepare_payload(payload)
             await self._queue.put(payload)
         return payloads
 
@@ -206,9 +203,7 @@ class ChronicleGate(BaseChronicle):
             self._writer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._writer_task
-        for conn in self._connections.values():
-            conn.close()
-        self._connections.clear()
+        self._close_connections()
 
     def _ensure_writer_task(self) -> None:
         if self._writer_task and not self._writer_task.done():
@@ -267,6 +262,14 @@ class ChronicleGate(BaseChronicle):
             )
             conn.commit()
 
+    def _prepare_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload.setdefault("id", _uuid7())
+        payload.setdefault(
+            "timestamp",
+            _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
+        )
+        return payload
+
     def _prepare_record(self, payload: Dict[str, Any]) -> ChronicleRecord:
         object_id = payload.get("id") or payload.get("object_id") or _uuid7()
         timestamp = _normalize_timestamp(payload.get("timestamp") or payload.get("create_time"))
@@ -302,6 +305,11 @@ class ChronicleGate(BaseChronicle):
         conn.execute("PRAGMA synchronous=NORMAL;")
         self._connections[db_path] = conn
         return conn
+
+    def _close_connections(self) -> None:
+        for conn in self._connections.values():
+            conn.close()
+        self._connections.clear()
 
     def _read_by_id_sync(self, object_id: str) -> Optional[Dict[str, Any]]:
         for db_path in self._iter_db_paths():
