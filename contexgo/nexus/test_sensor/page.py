@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List,Any
 
 import flet as ft
 
@@ -129,11 +129,11 @@ class SensorDashboard:
             self.page.update()
 
     async def subscribe_updates(self) -> None:
-        await self._subscribe_forever(
-            SENSOR_STATUS_SUBSCRIPTION,
-            handler=self._handle_status_update,
-            label="状态",
-        )
+            await self._subscribe_forever(
+                SENSOR_STATUS_SUBSCRIPTION,
+                handler=self._handle_status_update,
+                label="状态",
+            )
 
     async def subscribe_errors(self) -> None:
         await self._subscribe_forever(
@@ -143,29 +143,35 @@ class SensorDashboard:
         )
 
     async def _subscribe_forever(
-        self,
-        subscription: str,
-        *,
-        handler: Callable[[Dict[str, Dict[str, str]]], None],
-        label: str,
+        self, 
+        subscription: str, 
+        handler: Callable[[Dict[str, Any]], None], 
+        label: str = ""
     ) -> None:
+        """具备生命周期感知的持久订阅逻辑。"""
         if is_test_mode:
-            logger.info("订阅传感器%s更新: 启动", label)
-        retry_delay = 1.0
-        while True:
-            try:
-                async for payload in self.client.subscribe(subscription):
-                    handler(payload)
-                    retry_delay = 1.0
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self._status.value = f"{label}订阅中断: {exc}"
-                if is_test_mode:
-                    logger.exception("订阅传感器%s中断", label)
-                self.page.update()
-                await asyncio.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, 10.0)
+            logger.info(f"启动 {label} 订阅链路")
+            
+        try:
+            async for payload in self.client.subscribe(subscription):
+                # 验证 Session 是否存活
+                if not self.page.session_id:
+                    break
+                
+                # 执行回调处理数据
+                handler(payload)
+                
+                try:
+                    self.page.update()
+                except RuntimeError as e:
+                    if "destroyed session" in str(e):
+                        logger.warning(f"Session 已销毁，停止 {label} UI 更新任务")
+                        return
+                    raise
+        except asyncio.CancelledError:
+            logger.info(f"{label} 后台任务正常停机")
+        except Exception as e:
+            logger.error(f"{label} 订阅链路崩溃: {e}")
 
     def _handle_status_update(self, payload: Dict[str, Dict[str, str]]) -> None:
         update = payload.get("data", {}).get("sensorStatus")
