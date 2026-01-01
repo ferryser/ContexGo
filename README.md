@@ -135,6 +135,12 @@
 > - 后端：`python -m contexgo.main`
 > - UI：`python -m nexus.test_sensor` 或 `python nexus/test_sensor/app.py`
 
+### 日志规范
+
+* 日志默认目录：`data/logs/chronicle/`，可通过配置参数（如 `log_dir`）覆盖目录路径。
+* 命名规则：使用产生日志的模块脚本名作为文件名，例如 `contexgo.nexus.test_sensor.page` 输出到 `data/logs/chronicle/page.log`。
+* 滚动与保留：单文件大小 `5 MB` 触发滚动，保留最近 `5` 个历史文件（`rotation="5 MB"`, `retention=5`）。
+
 ## 7. 协议 (License)
 
 **apache 2.0**
