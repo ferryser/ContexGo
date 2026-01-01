@@ -10,6 +10,10 @@ from typing import Any, AsyncIterator, Dict, Optional
 import httpx
 import websockets
 
+from contexgo.infra.config import is_test_mode
+from contexgo.infra.logging_utils import get_logger
+
+logger = get_logger("nexus.test_sensor.api_client")
 
 @dataclass(frozen=True)
 class GraphQLResponse:
@@ -39,6 +43,10 @@ class GraphQLClient:
         self.ws_url = ws_url
         self._headers = headers or {}
         self._client = httpx.AsyncClient(timeout=timeout, headers=self._headers)
+        if is_test_mode:
+            logger.info(
+                "GraphQL client 初始化: http_url=%s ws_url=%s", self.http_url, self.ws_url
+            )
 
     async def close(self) -> None:
         await self._client.aclose()
