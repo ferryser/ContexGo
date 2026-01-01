@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import platform
 
-is_test_mode: bool = False
+is_test_mode: bool = True
 
 
 def get_sys_type() -> str:
