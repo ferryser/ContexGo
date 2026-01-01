@@ -21,5 +21,16 @@ if errorlevel 1 (
 echo [INFO] Launching Sensor UI...
 start "ContexGo Sensor UI" /B python -m nexus.test_sensor
 
+echo.
+echo Press Y, Esc, or Ctrl+C to exit...
+choice /n /c Y /m "Waiting for exit key"
+if errorlevel 255 goto :EXIT
+if errorlevel 1 goto :EXIT
+
+popd >nul
+endlocal
+goto :eof
+
+:EXIT
 popd >nul
 endlocal
