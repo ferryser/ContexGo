@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 import flet as ft
 
@@ -44,6 +44,17 @@ subscription SensorStatus {
     sensorId
     status
     message
+  }
+}
+"""
+
+SENSOR_ERROR_SUBSCRIPTION = """
+subscription SensorErrors {
+  sensorErrors {
+    sensorId
+    message
+    error
+    errorCount
   }
 }
 """
@@ -118,60 +129,82 @@ class SensorDashboard:
             self.page.update()
 
     async def subscribe_updates(self) -> None:
-        if is_test_mode:
-            logger.info("订阅传感器状态更新: 启动")
-        try:
-            async for payload in self.client.subscribe(SENSOR_STATUS_SUBSCRIPTION):
-                update = payload.get("data", {}).get("sensorStatus")
-                if not update:
-                    if is_test_mode:
-                        logger.info("订阅传感器状态更新: 收到空数据")
-                    continue
-                sensor_id = str(update.get("sensorId"))
-                status = str(update.get("status", ""))
-                message = str(update.get("message", ""))
-                is_on = status.lower() == "running"
-                if is_test_mode:
-                    logger.info(
-                        "订阅传感器状态更新: sensor_id=%s status=%s message=%s",
-                        sensor_id,
-                        status,
-                        message,
-                    )
-                self._apply_state(sensor_id, is_on, message=message)
-        except Exception as e:
-            self._status.value = f"订阅中断: {e}"
-            if is_test_mode:
-                logger.exception("订阅中断")
-            self.page.update()
+        await self._subscribe_forever(
+            SENSOR_STATUS_SUBSCRIPTION,
+            handler=self._handle_status_update,
+            label="状态",
+        )
 
-    async def poll_sensors(self) -> None:
+    async def subscribe_errors(self) -> None:
+        await self._subscribe_forever(
+            SENSOR_ERROR_SUBSCRIPTION,
+            handler=self._handle_error_update,
+            label="错误",
+        )
+
+    async def _subscribe_forever(
+        self,
+        subscription: str,
+        *,
+        handler: Callable[[Dict[str, Dict[str, str]]], None],
+        label: str,
+    ) -> None:
         if is_test_mode:
-            logger.info("轮询传感器状态: 启动")
+            logger.info("订阅传感器%s更新: 启动", label)
+        retry_delay = 1.0
         while True:
-            if is_test_mode:
-                logger.info("轮询传感器状态: 请求开始")
             try:
-                response = await self.client.query(SENSORS_QUERY)
-                sensors = response.data.get("sensors", [])
-                self._sync_sensors(sensors)
-                if not sensors:
-                    self._status.value = "暂无传感器数据。"
-                    if is_test_mode:
-                        logger.info("轮询传感器状态: 返回空列表")
-                else:
-                    self._status.value = f"已刷新 {len(sensors)} 个传感器。"
-                    if is_test_mode:
-                        logger.info("轮询传感器状态: 返回数量=%s", len(sensors))
-                self.page.update()
-                if is_test_mode:
-                    logger.info("轮询传感器状态: 请求结束")
+                async for payload in self.client.subscribe(subscription):
+                    handler(payload)
+                    retry_delay = 1.0
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                self._status.value = f"轮询失败: {exc}"
+                self._status.value = f"{label}订阅中断: {exc}"
                 if is_test_mode:
-                    logger.exception("轮询失败")
+                    logger.exception("订阅传感器%s中断", label)
                 self.page.update()
-            await asyncio.sleep(1)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 10.0)
+
+    def _handle_status_update(self, payload: Dict[str, Dict[str, str]]) -> None:
+        update = payload.get("data", {}).get("sensorStatus")
+        if not update:
+            if is_test_mode:
+                logger.info("订阅传感器状态更新: 收到空数据")
+            return
+        sensor_id = str(update.get("sensorId"))
+        status = str(update.get("status", ""))
+        message = str(update.get("message", ""))
+        is_on = status.lower() == "running"
+        if is_test_mode:
+            logger.info(
+                "订阅传感器状态更新: sensor_id=%s status=%s message=%s",
+                sensor_id,
+                status,
+                message,
+            )
+        self._apply_state(sensor_id, is_on, message=message)
+
+    def _handle_error_update(self, payload: Dict[str, Dict[str, str]]) -> None:
+        update = payload.get("data", {}).get("sensorErrors")
+        if not update:
+            if is_test_mode:
+                logger.info("订阅传感器错误更新: 收到空数据")
+            return
+        sensor_id = str(update.get("sensorId"))
+        message = str(update.get("message", ""))
+        error = str(update.get("error", ""))
+        if is_test_mode:
+            logger.info(
+                "订阅传感器错误更新: sensor_id=%s message=%s error=%s",
+                sensor_id,
+                message,
+                error,
+            )
+        details = f"{message} ({error})" if error else message
+        self._status.value = f"传感器 {sensor_id} 错误: {details}"
+        self.page.update()
 
     async def _handle_toggle(self, sensor_id: str, enabled: bool) -> None:
         if is_test_mode:
@@ -197,30 +230,6 @@ class SensorDashboard:
         else:
             self._status.value = f"传感器 {switch.model.name} 状态已更新。"
         self.page.update()
-
-    def _sync_sensors(self, sensors: list[dict]) -> None:
-        new_ids = {str(sensor["id"]) for sensor in sensors}
-        old_ids = set(self._switches.keys())
-
-        for sensor_id in old_ids - new_ids:
-            switch = self._switches.pop(sensor_id, None)
-            if switch:
-                self._list_view.controls.remove(switch)
-
-        for sensor in sensors:
-            sensor_id = str(sensor["id"])
-            is_on = bool(sensor.get("isOn"))
-            if sensor_id in self._switches:
-                self._switches[sensor_id].set_state(is_on)
-            else:
-                model = SensorViewModel(
-                    sensor_id=sensor_id,
-                    name=str(sensor["name"]),
-                    is_on=is_on,
-                )
-                switch = SensorSwitch(model, on_toggle=self._handle_toggle)
-                self._switches[model.sensor_id] = switch
-                self._list_view.controls.append(switch)
 
     def _handle_all_on_click(self, _: ft.ControlEvent) -> None:
         asyncio.create_task(self.set_all(True))
@@ -265,9 +274,9 @@ async def main(page: ft.Page) -> None:
         await dashboard.load_sensors()
         # 确保数据加载后再次更新 UI
         page.update()
-        # 并行启动轮询和订阅任务
-        page.run_task(dashboard.poll_sensors)
+        # 并行启动 WebSocket 订阅任务
         page.run_task(dashboard.subscribe_updates)
+        page.run_task(dashboard.subscribe_errors)
 
     def shutdown(_: ft.ControlEvent) -> None:
         asyncio.create_task(client.close())
