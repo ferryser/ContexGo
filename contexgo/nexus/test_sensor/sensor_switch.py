@@ -34,7 +34,7 @@ class SensorSwitch(ft.Column):
         self.controls = [
             ft.Container(
                 padding=12,
-                border=ft.border.all(1, ft.colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                 border_radius=8,
                 content=ft.Row(
                     controls=[

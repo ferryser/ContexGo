@@ -144,14 +144,18 @@ class GraphQLClient:
                 raise GraphQLClientError(str(data.get("payload")))
 
     async def _safe_complete(
-        self, websocket: websockets.WebSocketClientProtocol, subscription_id: str
+        self, websocket: websockets.asyncio.client.ClientConnection, subscription_id: str
     ) -> None:
-        if websocket.closed:
-            return
+        """
+        不再依赖不存在的 .closed 属性。
+        直接通过 try-except 捕获所有连接断开导致的异常。
+        """
         try:
+            # 无论连接状态如何，尝试发送完成信号
             await websocket.send(
                 json.dumps({"id": subscription_id, "type": "complete"})
             )
         except Exception:
+            # 如果连接已断开（没有 .closed 属性可检查），静默忽略
             pass
         await asyncio.sleep(0)
