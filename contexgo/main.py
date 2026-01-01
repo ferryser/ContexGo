@@ -4,32 +4,29 @@ import os
 import signal
 import socket
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import uvicorn
 from fastapi import FastAPI
 from strawberry.fastapi import GraphQLRouter
 
-from contexgo.protocol.api.schema import schema
 from contexgo.chronicle.assembly.sensor_manager import SensorManager
-from contexgo.protocol.api.sensor_registry import register_sensors_from_config
+from contexgo.chronicle.assembly.chronicle_gate import shutdown_default_gate
+from contexgo.infra.logging_utils import get_logger
+from contexgo.protocol.api.schema import schema
+from contexgo.protocol.api.sensor_registry import (
+    get_sensor_factory,
+    register_sensors_from_config,
+)
 
-CONTROL_QUEUE: Optional[asyncio.Queue[str]] = None
 STOP_EVENT: Optional[asyncio.Event] = None
 
-
-def submit_control(command: str) -> None:
-    if CONTROL_QUEUE is None:
-        raise RuntimeError("Control queue not initialized")
-    CONTROL_QUEUE.put_nowait(command)
-
-
-def request_shutdown() -> None:
-    if STOP_EVENT is None:
-        raise RuntimeError("Stop event not initialized")
-    STOP_EVENT.set()
+logger = get_logger(__name__)
+DEFAULT_SENSOR_CONFIG_PATH = Path("data") / "CONTEXGO_SENSOR_CONFIG.json"
+_SCRIPT_LOG_TIMES: Dict[str, float] = {}
 
 
 @dataclass
@@ -77,7 +74,114 @@ def build_app() -> FastAPI:
     return app
 
 
-def register_default_sensors() -> None:
+def _default_sensor_configs() -> Dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "global_config": {},
+        "sensors": [
+            {
+                "sensor_type": "input_metric",
+                "sensor_id": "input_metric",
+                "script_path": "contexgo/chronicle/sensors/activity.py",
+                "config": {"capture_interval": 1.0},
+            },
+            {
+                "sensor_type": "window_focus",
+                "sensor_id": "window_focus",
+                "script_path": "contexgo/chronicle/sensors/focus.py",
+                "config": {"capture_interval": 1.0},
+            },
+            {
+                "sensor_type": "desktop_snapshot",
+                "sensor_id": "desktop_snapshot",
+                "script_path": "contexgo/chronicle/sensors/vision/capturer.py",
+                "config": {"capture_interval": 10.0},
+            },
+            {
+                "sensor_type": "clipboard_update",
+                "sensor_id": "clipboard_update",
+                "script_path": "contexgo/chronicle/sensors/clipboard.py",
+                "config": {},
+            },
+            {
+                "sensor_type": "system_lifecycle",
+                "sensor_id": "system_lifecycle",
+                "script_path": "contexgo/chronicle/sensors/heartbeat.py",
+                "config": {},
+            },
+            {
+                "sensor_type": "file_mutation",
+                "sensor_id": "file_mutation",
+                "script_path": "contexgo/chronicle/sensors/files.py",
+                "config": {},
+            },
+            {
+                "sensor_type": "media_status",
+                "sensor_id": "media_status",
+                "script_path": "contexgo/chronicle/sensors/media.py",
+                "config": {},
+            },
+        ],
+    }
+
+
+def _write_default_sensor_config(path: Path) -> None:
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _default_sensor_configs()
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+def _parse_sensor_configs(payload: Any) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    if payload is None:
+        return [], {}
+    if isinstance(payload, dict):
+        sensors = payload.get("sensors", [])
+        global_config = payload.get("global_config", {})
+        if not isinstance(sensors, list):
+            raise ValueError("Sensor configuration 'sensors' must be a list")
+        if not isinstance(global_config, dict):
+            raise ValueError("Sensor configuration 'global_config' must be a dict")
+        return sensors, global_config
+    if isinstance(payload, list):
+        return payload, {}
+    raise ValueError("Sensor configuration must be a list or object")
+
+
+def _log_missing_script(path: Path) -> None:
+    now = time.time()
+    last = _SCRIPT_LOG_TIMES.get(str(path), 0.0)
+    if now - last < 600:
+        return
+    _SCRIPT_LOG_TIMES[str(path)] = now
+    logger.warning("Sensor script missing: %s", path.as_posix())
+
+
+def _filter_configs(configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    factory = get_sensor_factory()
+    filtered: List[Dict[str, Any]] = []
+    for item in configs:
+        if not isinstance(item, dict):
+            raise ValueError("Sensor configuration entries must be dictionaries")
+        script_path = item.get("script_path") or item.get("script")
+        if script_path:
+            script = Path(str(script_path))
+            if not script.exists():
+                _log_missing_script(script)
+                continue
+        sensor_type = item.get("sensor_type")
+        if not sensor_type:
+            raise ValueError("sensor_type is required in sensor configuration")
+        if str(sensor_type).strip().lower() not in factory:
+            logger.warning("Unknown sensor type '%s'; skipping", sensor_type)
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def register_default_sensors() -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     config_path = os.getenv("CONTEXGO_SENSOR_CONFIG_PATH")
     config_payload = os.getenv("CONTEXGO_SENSOR_CONFIG")
     configs = None
@@ -87,14 +191,16 @@ def register_default_sensors() -> None:
             configs = json.load(handle)
     elif config_payload:
         configs = json.loads(config_payload)
+    else:
+        _write_default_sensor_config(DEFAULT_SENSOR_CONFIG_PATH)
+        with DEFAULT_SENSOR_CONFIG_PATH.open("r", encoding="utf-8") as handle:
+            configs = json.load(handle)
 
-    if not configs:
-        return
-
-    if not isinstance(configs, list):
-        raise ValueError("Sensor configuration must be a list")
-
-    register_sensors_from_config(configs)
+    sensor_configs, global_config = _parse_sensor_configs(configs)
+    sensor_configs = _filter_configs(sensor_configs)
+    if sensor_configs:
+        register_sensors_from_config(sensor_configs)
+    return sensor_configs, global_config
 
 
 _SENSOR_MANAGER: Optional[SensorManager] = None
@@ -105,35 +211,6 @@ def _get_sensor_manager() -> SensorManager:
     if _SENSOR_MANAGER is None:
         _SENSOR_MANAGER = SensorManager()
     return _SENSOR_MANAGER
-
-
-async def sample_sensors() -> None:
-    manager = _get_sensor_manager()
-    await manager.sample_all()
-    await asyncio.sleep(0.1)
-
-
-async def sensor_loop(control_queue: asyncio.Queue[str], stop_event: asyncio.Event) -> None:
-    paused = False
-    while not stop_event.is_set():
-        try:
-            command = await asyncio.wait_for(control_queue.get(), timeout=0.2)
-        except asyncio.TimeoutError:
-            command = None
-
-        if command == "pause":
-            paused = True
-        elif command == "resume":
-            paused = False
-        elif command == "shutdown":
-            stop_event.set()
-            continue
-
-        if paused:
-            await asyncio.sleep(0.1)
-            continue
-
-        await sample_sensors()
 
 
 def install_signal_handlers(
@@ -157,7 +234,7 @@ async def run() -> None:
     port = int(os.getenv("CONTEXGO_PORT", "35011"))
     instance_lock = acquire_instance_lock(host, port)
 
-    register_default_sensors()
+    _, global_config = register_default_sensors()
     app = build_app()
     config = uvicorn.Config(
         app,
@@ -169,18 +246,23 @@ async def run() -> None:
     )
     server = uvicorn.Server(config)
 
-    global CONTROL_QUEUE, STOP_EVENT
+    global STOP_EVENT
     STOP_EVENT = asyncio.Event()
-    CONTROL_QUEUE = asyncio.Queue()
 
     loop = asyncio.get_running_loop()
     install_signal_handlers(loop, STOP_EVENT, server)
 
     server_task = asyncio.create_task(server.serve())
-    sensor_task = asyncio.create_task(sensor_loop(CONTROL_QUEUE, STOP_EVENT))
+    manager = _get_sensor_manager()
+    if global_config:
+        manager.apply_global_config(global_config)
+    manager.start_all()
+    sensor_task = asyncio.create_task(manager.monitor_health(STOP_EVENT))
 
     await STOP_EVENT.wait()
     server.should_exit = True
+    manager.stop_all()
+    await shutdown_default_gate()
     await asyncio.gather(server_task, sensor_task, return_exceptions=True)
 
 

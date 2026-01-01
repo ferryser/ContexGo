@@ -21,8 +21,8 @@ query Sensors {
 """
 
 TOGGLE_SENSOR_MUTATION = """
-mutation ToggleSensor($id: ID!, $enabled: Boolean!) {
-  toggleSensor(id: $id, enabled: $enabled) {
+mutation ToggleSensor($sensorId: ID!, $enable: Boolean!) {
+  toggleSensor(sensorId: $sensorId, enable: $enable) {
     statusCode
     message
     sensors {
@@ -111,7 +111,7 @@ class SensorDashboard:
         try:
             await self.client.mutate(
                 TOGGLE_SENSOR_MUTATION,
-                variables={"id": sensor_id, "enabled": enabled},
+                variables={"sensorId": sensor_id, "enable": enabled},
             )
         except Exception as exc:  # noqa: BLE001 - UI feedback
             self._status.value = f"开关请求失败: {exc}"
@@ -138,7 +138,7 @@ class SensorDashboard:
                 asyncio.create_task(
                     self.client.mutate(
                         TOGGLE_SENSOR_MUTATION,
-                        variables={"id": sensor_id, "enabled": enabled},
+                        variables={"sensorId": sensor_id, "enable": enabled},
                     )
                 )
             )
@@ -147,8 +147,8 @@ class SensorDashboard:
 
 
 def _build_client() -> GraphQLClient:
-    http_url = os.getenv("GRAPHQL_HTTP_URL", "http://localhost:8000/graphql")
-    ws_url = os.getenv("GRAPHQL_WS_URL", "ws://localhost:8000/graphql")
+    http_url = os.getenv("GRAPHQL_HTTP_URL", "http://localhost:35011/graphql")
+    ws_url = os.getenv("GRAPHQL_WS_URL", "ws://localhost:35011/graphql")
     return GraphQLClient(http_url=http_url, ws_url=ws_url)
 
 

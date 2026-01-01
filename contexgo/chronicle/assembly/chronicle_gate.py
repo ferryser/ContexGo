@@ -133,6 +133,13 @@ def save_raw_context(raw: RawContextProperties, base_path: Optional[Path] = None
     return save_event(payload, base_path=base_path)
 
 
+async def shutdown_default_gate() -> None:
+    gate = _DEFAULT_GATE
+    if gate is None:
+        return
+    await gate.shutdown()
+
+
 @dataclass
 class ChronicleRecord:
     object_id: str
