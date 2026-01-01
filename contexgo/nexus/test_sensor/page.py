@@ -150,15 +150,32 @@ class SensorDashboard:
     ) -> None:
         """具备生命周期感知的持久订阅逻辑。"""
         if is_test_mode:
-            logger.info(f"启动 {label} 订阅链路")
+            logger.info(
+                "启动 %s 订阅链路: session_id=%s route=%s",
+                label,
+                self.page.session_id,
+                getattr(self.page, "route", None),
+            )
             
         try:
             async for payload in self.client.subscribe(subscription):
                 # 验证 Session 是否存活
                 if not self.page.session_id:
+                    logger.warning(
+                        "%s 订阅链路终止: session_id 缺失 (payload_keys=%s)",
+                        label,
+                        list(payload.keys()),
+                    )
                     break
                 
                 # 执行回调处理数据
+                if is_test_mode:
+                    logger.info(
+                        "%s 订阅消息: session_id=%s payload_keys=%s",
+                        label,
+                        self.page.session_id,
+                        list(payload.keys()),
+                    )
                 handler(payload)
                 
                 try:
