@@ -137,8 +137,12 @@
 
 ### 日志规范
 
-* 日志默认目录：`data/logs/chronicle/`，可通过配置参数（如 `log_dir`）覆盖目录路径。
-* 命名规则：使用产生日志的模块脚本名作为文件名，例如 `contexgo.nexus.test_sensor.page` 输出到 `data/logs/chronicle/page.log`。
+* 日志统一存放在 `data/logs/`，最多使用一层子目录，子目录名取自 `contexgo/` 下脚本路径的第一层。
+* 命名规则：日志文件名必须与脚本文件名一致（不含扩展名），例如：
+  * `contexgo/chronicle/sensors/focus.py` → `data/logs/chronicle/focus.log`
+  * `contexgo/chronicle/assembly/chronicle_gate.py` → `data/logs/chronicle/chronicle_gate.log`
+  * `contexgo/main.py` → `data/logs/main.log`
+* 代码需自动创建目录层级（`os.makedirs(os.path.dirname(log_path), exist_ok=True)`）。
 * 滚动与保留：单文件大小 `5 MB` 触发滚动，保留最近 `5` 个历史文件（`rotation="5 MB"`, `retention=5`）。
 
 ## 7. 协议 (License)

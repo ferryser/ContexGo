@@ -8,12 +8,11 @@ from typing import Dict, List
 import flet as ft
 
 from contexgo.infra.config import is_test_mode
-from contexgo.infra.logging_utils import get_logger, setup_logging
+from contexgo.infra.logging_utils import build_log_config, get_logger, setup_logging
 
 from .api_client import GraphQLClient
 from .sensor_switch import SensorSwitch, SensorViewModel
 
-LOG_PATH = "data/logs/chronicle/test_sensor_ui.log"
 logger = get_logger("nexus.test_sensor.page")
 
 SENSORS_QUERY = """
@@ -183,7 +182,7 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    setup_logging({"log_path": LOG_PATH, "level": "INFO"})
+    setup_logging(build_log_config(__file__, level="INFO"))
     if is_test_mode:
         logger.info("UI 启动")
     ft.app(target=main)
