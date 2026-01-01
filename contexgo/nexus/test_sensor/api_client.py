@@ -99,7 +99,13 @@ class GraphQLClient:
             "variables": variables or {},
             "operationName": operation_name,
         }
-        async with websockets.connect(self.ws_url, extra_headers=self._headers) as websocket:
+        
+        # 修复点：添加 subprotocols 参数，显式声明支持 graphql-transport-ws
+        async with websockets.connect(
+            self.ws_url, 
+            additional_headers=self._headers,
+            subprotocols=["graphql-transport-ws"]
+        ) as websocket:
             await websocket.send(json.dumps({"type": "connection_init", "payload": {}}))
             await self._await_connection_ack(websocket)
             await websocket.send(
@@ -112,6 +118,12 @@ class GraphQLClient:
                 async for message in websocket:
                     data = json.loads(message)
                     message_type = data.get("type")
+                    
+                    # 兼容 graphql-transport-ws 的 ping/pong 机制
+                    if message_type == "ping":
+                        await websocket.send(json.dumps({"type": "pong"}))
+                        continue
+                    
                     if message_type == "next":
                         yield data.get("payload", {})
                     elif message_type == "error":
@@ -136,7 +148,10 @@ class GraphQLClient:
     ) -> None:
         if websocket.closed:
             return
-        await websocket.send(
-            json.dumps({"id": subscription_id, "type": "complete"})
-        )
+        try:
+            await websocket.send(
+                json.dumps({"id": subscription_id, "type": "complete"})
+            )
+        except Exception:
+            pass
         await asyncio.sleep(0)

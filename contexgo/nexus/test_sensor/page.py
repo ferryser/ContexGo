@@ -55,10 +55,11 @@ class SensorDashboard:
         self.client = client
         self._switches: Dict[str, SensorSwitch] = {}
         self._list_view = ft.ListView(expand=True, spacing=12)
-        self._status = ft.Text()
+        self._status = ft.Text("正在初始化...")
         self._all_on_button = ft.ElevatedButton(
             "全部启动", on_click=self._handle_all_on_click
         )
+
     @property
     def view(self) -> ft.Control:
         return ft.Column(
@@ -80,40 +81,49 @@ class SensorDashboard:
     async def load_sensors(self) -> None:
         if is_test_mode:
             logger.info("加载传感器列表")
-        response = await self.client.query(SENSORS_QUERY)
-        sensors = response.data.get("sensors", [])
-        self._list_view.controls.clear()
-        self._switches.clear()
+        try:
+            response = await self.client.query(SENSORS_QUERY)
+            sensors = response.data.get("sensors", [])
+            
+            self._list_view.controls.clear()
+            self._switches.clear()
 
-        for sensor in sensors:
-            model = SensorViewModel(
-                sensor_id=str(sensor["id"]),
-                name=str(sensor["name"]),
-                is_on=bool(sensor.get("isOn")),
-            )
-            switch = SensorSwitch(model, on_toggle=self._handle_toggle)
-            self._switches[model.sensor_id] = switch
-            self._list_view.controls.append(switch)
+            for sensor in sensors:
+                model = SensorViewModel(
+                    sensor_id=str(sensor["id"]),
+                    name=str(sensor["name"]),
+                    is_on=bool(sensor.get("isOn")),
+                )
+                switch = SensorSwitch(model, on_toggle=self._handle_toggle)
+                self._switches[model.sensor_id] = switch
+                self._list_view.controls.append(switch)
 
-        if not sensors:
-            self._status.value = "暂无传感器数据。"
-        else:
-            self._status.value = f"已加载 {len(sensors)} 个传感器。"
-
-        self.page.update()
+            if not sensors:
+                self._status.value = "暂无传感器数据。"
+            else:
+                self._status.value = f"已加载 {len(sensors)} 个传感器。"
+            
+            # 确保 UI 强制刷新
+            self.page.update()
+        except Exception as e:
+            self._status.value = f"加载失败: {e}"
+            self.page.update()
 
     async def subscribe_updates(self) -> None:
         if is_test_mode:
             logger.info("订阅传感器状态更新")
-        async for payload in self.client.subscribe(SENSOR_STATUS_SUBSCRIPTION):
-            update = payload.get("data", {}).get("sensorStatus")
-            if not update:
-                continue
-            sensor_id = str(update.get("sensorId"))
-            status = str(update.get("status", ""))
-            message = str(update.get("message", ""))
-            is_on = status.lower() == "running"
-            self._apply_state(sensor_id, is_on, message=message)
+        try:
+            async for payload in self.client.subscribe(SENSOR_STATUS_SUBSCRIPTION):
+                update = payload.get("data", {}).get("sensorStatus")
+                if not update:
+                    continue
+                sensor_id = str(update.get("sensorId"))
+                status = str(update.get("status", ""))
+                message = str(update.get("message", ""))
+                is_on = status.lower() == "running"
+                self._apply_state(sensor_id, is_on, message=message)
+        except Exception as e:
+            logger.error(f"订阅中断: {e}")
 
     async def _handle_toggle(self, sensor_id: str, enabled: bool) -> None:
         if is_test_mode:
@@ -123,7 +133,7 @@ class SensorDashboard:
                 TOGGLE_SENSOR_MUTATION,
                 variables={"sensorId": sensor_id, "enable": enabled},
             )
-        except Exception as exc:  # noqa: BLE001 - UI feedback
+        except Exception as exc:
             self._status.value = f"开关请求失败: {exc}"
             self.page.update()
 
@@ -162,26 +172,37 @@ def _build_client() -> GraphQLClient:
     return GraphQLClient(http_url=http_url, ws_url=ws_url)
 
 
-def main(page: ft.Page) -> None:
+async def main(page: ft.Page) -> None:
     page.title = "Sensor Dashboard"
     page.padding = 24
+    
+    # 显式设置页面主题和亮度，防止某些版本默认透明
+    page.theme_mode = ft.ThemeMode.LIGHT
+    
     client = _build_client()
     dashboard = SensorDashboard(page, client)
+    
+    # 先添加视图框架，确保页面不是空的
     page.add(dashboard.view)
+    page.update()
 
-    async def startup() -> None:
+    # 数据初始化逻辑
+    async def startup():
         await dashboard.load_sensors()
-        page.run_task(dashboard.subscribe_updates)
+        # 确保数据加载后再次更新 UI
+        page.update()
+        # 启动后台订阅
+        await dashboard.subscribe_updates()
 
     def shutdown(_: ft.ControlEvent) -> None:
         asyncio.create_task(client.close())
 
     page.on_close = shutdown
+    
+    # 使用 run_task 启动主初始化逻辑
     page.run_task(startup)
 
 
 if __name__ == "__main__":
     setup_logging(build_log_config(__file__, level="INFO"))
-    if is_test_mode:
-        logger.info("UI 启动")
     ft.app(target=main)
