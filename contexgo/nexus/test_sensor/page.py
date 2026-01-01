@@ -7,8 +7,14 @@ from typing import Dict, List
 
 import flet as ft
 
+from contexgo.infra.config import is_test_mode
+from contexgo.infra.logging_utils import get_logger, setup_logging
+
 from .api_client import GraphQLClient
 from .sensor_switch import SensorSwitch, SensorViewModel
+
+LOG_PATH = "data/logs/chronicle/test_sensor_ui.log"
+logger = get_logger("nexus.test_sensor.page")
 
 SENSORS_QUERY = """
 query Sensors {
@@ -74,6 +80,8 @@ class SensorDashboard:
         )
 
     async def load_sensors(self) -> None:
+        if is_test_mode:
+            logger.info("加载传感器列表")
         response = await self.client.query(SENSORS_QUERY)
         sensors = response.data.get("sensors", [])
         self._list_view.controls.clear()
@@ -97,6 +105,8 @@ class SensorDashboard:
         self.page.update()
 
     async def subscribe_updates(self) -> None:
+        if is_test_mode:
+            logger.info("订阅传感器状态更新")
         async for payload in self.client.subscribe(SENSOR_STATUS_SUBSCRIPTION):
             update = payload.get("data", {}).get("sensorStatus")
             if not update:
@@ -108,6 +118,8 @@ class SensorDashboard:
             self._apply_state(sensor_id, is_on, message=message)
 
     async def _handle_toggle(self, sensor_id: str, enabled: bool) -> None:
+        if is_test_mode:
+            logger.info("发送开关请求: sensor_id=%s enable=%s", sensor_id, enabled)
         try:
             await self.client.mutate(
                 TOGGLE_SENSOR_MUTATION,
@@ -171,4 +183,7 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
+    setup_logging({"log_path": LOG_PATH, "level": "INFO"})
+    if is_test_mode:
+        logger.info("UI 启动")
     ft.app(target=main)
