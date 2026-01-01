@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
 from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
-from contexgo.chronicle.sensors.window_focus import WindowFocusSensor
+from contexgo.chronicle.sensors.focus import WindowFocusSensor
 
 
 @dataclass(frozen=True)
