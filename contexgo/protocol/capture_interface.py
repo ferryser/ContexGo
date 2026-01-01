@@ -8,8 +8,9 @@
 """
 Context capture component interface definition
 """
-
+from typing import Dict, Any, List, Optional
 import abc
+from contexgo.protocol.context import RawContextProperties
 
 class ICaptureComponent(abc.ABC):
     """

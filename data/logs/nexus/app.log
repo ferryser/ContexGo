@@ -1,0 +1,17 @@
+2026-01-01 22:19:28 | INFO     | contexgo.infra.logging_utils:setup_logging:12 - ContexGo logging infrastructure initialized
+2026-01-01 22:19:28 | INFO     | contexgo.nexus.test_sensor.app:run:17 - UI 启动
+2026-01-01 22:19:51 | INFO     | contexgo.nexus.test_sensor.api_client:__init__:47 - GraphQL client 初始化: http_url=%s ws_url=%s
+2026-01-01 22:21:04 | INFO     | contexgo.infra.logging_utils:setup_logging:12 - ContexGo logging infrastructure initialized
+2026-01-01 22:21:04 | INFO     | contexgo.nexus.test_sensor.app:run:17 - UI 启动
+2026-01-01 22:21:08 | INFO     | contexgo.nexus.test_sensor.api_client:__init__:47 - GraphQL client 初始化: http_url=%s ws_url=%s
+2026-01-01 22:22:15 | INFO     | contexgo.infra.logging_utils:setup_logging:12 - ContexGo logging infrastructure initialized
+2026-01-01 22:22:15 | INFO     | contexgo.nexus.test_sensor.app:run:17 - UI 启动
+2026-01-01 22:22:18 | INFO     | contexgo.nexus.test_sensor.api_client:__init__:47 - GraphQL client 初始化: http_url=%s ws_url=%s
+2026-01-01 22:25:24 | INFO     | contexgo.infra.logging_utils:setup_logging:12 - ContexGo logging infrastructure initialized
+2026-01-01 22:25:24 | INFO     | contexgo.nexus.test_sensor.app:run:17 - UI 启动
+2026-01-01 22:25:26 | INFO     | contexgo.nexus.test_sensor.api_client:__init__:47 - GraphQL client 初始化: http_url=%s ws_url=%s
+2026-01-01 22:27:41 | INFO     | contexgo.infra.logging_utils:setup_logging:12 - ContexGo logging infrastructure initialized
+2026-01-01 22:27:41 | INFO     | contexgo.nexus.test_sensor.app:run:17 - UI 启动
+2026-01-01 22:27:43 | INFO     | contexgo.nexus.test_sensor.api_client:__init__:47 - GraphQL client 初始化: http_url=%s ws_url=%s
+2026-01-01 22:27:43 | INFO     | contexgo.nexus.test_sensor.page:load_sensors:82 - 加载传感器列表
+2026-01-01 22:27:43 | INFO     | contexgo.nexus.test_sensor.page:subscribe_updates:107 - 订阅传感器状态更新

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "global_config": {},
+  "sensors": [
+    {
+      "sensor_type": "input_metric",
+      "sensor_id": "input_metric",
+      "script_path": "contexgo/chronicle/sensors/activity.py",
+      "config": {
+        "capture_interval": 1.0
+      }
+    },
+    {
+      "sensor_type": "window_focus",
+      "sensor_id": "window_focus",
+      "script_path": "contexgo/chronicle/sensors/focus.py",
+      "config": {
+        "capture_interval": 1.0
+      }
+    },
+    {
+      "sensor_type": "desktop_snapshot",
+      "sensor_id": "desktop_snapshot",
+      "script_path": "contexgo/chronicle/sensors/vision/capturer.py",
+      "config": {
+        "capture_interval": 10.0
+      }
+    },
+    {
+      "sensor_type": "clipboard_update",
+      "sensor_id": "clipboard_update",
+      "script_path": "contexgo/chronicle/sensors/clipboard.py",
+      "config": {}
+    },
+    {
+      "sensor_type": "system_lifecycle",
+      "sensor_id": "system_lifecycle",
+      "script_path": "contexgo/chronicle/sensors/heartbeat.py",
+      "config": {}
+    },
+    {
+      "sensor_type": "file_mutation",
+      "sensor_id": "file_mutation",
+      "script_path": "contexgo/chronicle/sensors/files.py",
+      "config": {}
+    },
+    {
+      "sensor_type": "media_status",
+      "sensor_id": "media_status",
+      "script_path": "contexgo/chronicle/sensors/media.py",
+      "config": {}
+    }
+  ]
+}

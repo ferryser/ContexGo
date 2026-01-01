@@ -1,4 +1,4 @@
-"""Reusable sensor toggle control."""
+"""Reusable sensor toggle control (Fixed for Flet 0.21.0+)."""
 from __future__ import annotations
 
 import asyncio
@@ -7,18 +7,15 @@ from typing import Awaitable, Callable, Optional
 
 import flet as ft
 
-
 @dataclass
 class SensorViewModel:
     sensor_id: str
     name: str
     is_on: bool = False
 
-
 ToggleHandler = Callable[[str, bool], Awaitable[None]]
 
-
-class SensorSwitch(ft.UserControl):
+class SensorSwitch(ft.Column):
     def __init__(
         self,
         model: SensorViewModel,
@@ -28,31 +25,35 @@ class SensorSwitch(ft.UserControl):
         super().__init__()
         self.model = model
         self._on_toggle = on_toggle
-        self._switch: ft.Switch | None = None
-        self._status: ft.Text | None = None
-
-    def build(self) -> ft.Control:
+        
+        # 1. 预定义状态文本和开关组件
         self._status = ft.Text(self._status_text(self.model.is_on))
         self._switch = ft.Switch(value=self.model.is_on, on_change=self._handle_toggle)
-        return ft.Container(
-            padding=12,
-            border=ft.border.all(1, ft.colors.OUTLINE_VARIANT),
-            border_radius=8,
-            content=ft.Row(
-                controls=[
-                    ft.Column(
-                        [
-                            ft.Text(self.model.name, weight=ft.FontWeight.BOLD),
-                            self._status,
-                        ],
-                        expand=True,
-                    ),
-                    self._switch,
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        )
+        
+        # 2. 直接在初始化阶段构建 UI 树并赋值给 self.controls
+        self.controls = [
+            ft.Container(
+                padding=12,
+                border=ft.border.all(1, ft.colors.OUTLINE_VARIANT),
+                border_radius=8,
+                content=ft.Row(
+                    controls=[
+                        ft.Column(
+                            [
+                                ft.Text(self.model.name, weight=ft.FontWeight.BOLD),
+                                self._status,
+                            ],
+                            expand=True,
+                        ),
+                        self._switch,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            )
+        ]
+
+    # 3. 移除原有的 build 方法，因为它在新版 Flet 中不再被自动调用
 
     def set_state(self, is_on: bool) -> None:
         self.model.is_on = is_on

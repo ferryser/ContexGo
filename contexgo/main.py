@@ -41,9 +41,8 @@ _SCRIPT_LOG_TIMES: Dict[str, float] = {}
 
 @dataclass
 class InstanceLock:
-    socket: Optional[socket.socket] = None
-    lock_file: Optional[object] = None
-
+    lock_socket: Optional[socket.socket] = None  # 更改变量名，彻底避开模块名
+    lock_file: Optional[Any] = None # 使用 Any 替代 object 以增强兼容性
 
 def acquire_instance_lock(host: str, port: int) -> InstanceLock:
     if os.name == "nt":
@@ -246,13 +245,16 @@ async def run() -> None:
 
     _, global_config = register_default_sensors()
     app = build_app()
+    
+    # 修复：uvicorn 配置中使用重命名后的变量
     config = uvicorn.Config(
         app,
         host=host,
         port=port,
         log_level="info",
         loop="asyncio",
-        fd=instance_lock.socket.fileno() if instance_lock.socket else None,
+        # 只有在非 Windows 且 socket 锁定成功时才传递 fd
+        fd=instance_lock.lock_socket.fileno() if instance_lock.lock_socket else None,
     )
     server = uvicorn.Server(config)
 

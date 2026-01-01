@@ -57,9 +57,8 @@ class SensorDashboard:
         self._list_view = ft.ListView(expand=True, spacing=12)
         self._status = ft.Text()
         self._all_on_button = ft.ElevatedButton(
-            text="全部启动", on_click=self._handle_all_on_click
+            "全部启动", on_click=self._handle_all_on_click
         )
-
     @property
     def view(self) -> ft.Control:
         return ft.Column(
