@@ -4,12 +4,23 @@ from enum import Enum
 
 class ContextSource(str, Enum):
     """Context source enumeration"""
-    SCREENSHOT = "screenshot"
-    VAULT = "vault"
-    LOCAL_FILE = "local_file"
-    WEB_LINK = "web_link"
-    INPUT = "input"
+    INPUT_METRIC = "input_metric"
     WINDOW_FOCUS = "window_focus"
+    DESKTOP_SNAPSHOT = "desktop_snapshot"
+    CLIPBOARD_UPDATE = "clipboard_update"
+    SYSTEM_LIFECYCLE = "system_lifecycle"
+    FILE_MUTATION = "file_mutation"
+    MEDIA_STATUS = "media_status"
+
+class EventType(str, Enum):
+    """Event type enumeration"""
+    INPUT_METRIC = "input_metric"
+    WINDOW_FOCUS = "window_focus"
+    DESKTOP_SNAPSHOT = "desktop_snapshot"
+    CLIPBOARD_UPDATE = "clipboard_update"
+    SYSTEM_LIFECYCLE = "system_lifecycle"
+    FILE_MUTATION = "file_mutation"
+    MEDIA_STATUS = "media_status"
 
 class FileType(str, Enum):
     """File type enumeration"""
