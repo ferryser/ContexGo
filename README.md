@@ -68,7 +68,7 @@
 * **Analyst:** 周期性（如每 15 分钟）发送压缩后的 JSON 摘要（包含所有已同步设备的合并上下文），请求云端进行深度心理推理。
 * **Gatekeeper:** 双重熔断机制（Pre-flight 脱敏/拦截，Post-flight 幻觉过滤）。
 
-### 🖥️ Module V: Interaction (Flet UI)
+### 🖥️ Module V: Interaction (Electron UI)
 * **Dashboard:** 可视化展示多端合并后的时间轴与云端生成的 Insight。
 * **Intervention:** Windows 系统级弹窗。仅在 Gatekeeper 放行高置信度建议时触发。
 
@@ -79,7 +79,7 @@
 | 模块 | 关键技术 | 选型理由 |
 | :--- | :--- | :--- |
 | **Language** | **Python 3.10+** | 胶水语言，生态丰富，完美适配 AI 与 UI 开发。 |
-| **GUI Framework** | **Flet** | Python wrapper for Flutter，开发效率高，性能足够，支持原生窗口特性。 |
+| **GUI Framework** | **Electron** | 生态成熟、跨平台一致性高，便于与前端可视化与系统托盘能力深度集成。 |
 | **Sync Engine** | **y-py** | 基于 Rust 的高性能 CRDT 库，工业级分布式一致性解决方案。 |
 | **Networking** | **Tailscale** | 虚拟组网工具，零配置实现 NAT 穿透与 P2P 加密通信。 |
 | **Cognitive Core** | **DeepSeek-V3** | (经由 OpenAI SDK) 极高性价比的云端推理引擎，适合高频日志分析。 |
@@ -102,7 +102,7 @@
 * [ ] 输出：一个能生成本地 JSON 日志的 CLI 工具。
 
 ### Phase 2: UI 原型 (Dashboard)
-* [ ] 搭建 Flet 主框架。
+* [ ] 搭建 Electron 主框架。
 * [ ] 实现时间轴组件可视化。
 * [ ] 实现系统托盘与后台驻留逻辑。
 
@@ -121,6 +121,20 @@
 ## 6. 传感器测试 UI (Sensor Test UI)
 
 传感器测试界面已切换为 Electron 方案，入口与启动方式以 Electron 侧说明为准。
+在 Windows 下可通过启动 Electron 应用进入传感器测试界面（当前为占位，后续与后端服务联动）：
+
+1. 安装依赖（推荐在虚拟环境内执行）：
+   ```bash
+   python -m pip install -e .
+   ```
+2. 启动 Electron 应用（占位）：
+   ```
+   # TODO: 提供 Electron 启动脚本或命令
+   ```
+
+> 若希望手动启动后端：
+> - 后端：`python -m contexgo.main`
+> - UI：Electron 启动方式待补充（占位）
 
 ### 日志规范
 
