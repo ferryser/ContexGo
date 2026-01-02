@@ -267,10 +267,10 @@ class ChronicleGate(BaseChronicle):
     def _prepare_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         if "id" not in payload and "object_id" not in payload:
             payload["id"] = _uuid7()
-        timestamp = payload.get("timestamp")
-        if timestamp is None:
-            timestamp = payload.get("create_time")
-        payload["timestamp"] = _normalize_timestamp(timestamp)
+        payload.setdefault(
+            "timestamp",
+            _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
+        )
         return payload
 
     def _prepare_record(self, payload: Dict[str, Any]) -> ChronicleRecord:
