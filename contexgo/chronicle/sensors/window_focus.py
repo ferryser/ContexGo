@@ -19,8 +19,9 @@ class WindowFocusSensor(BaseL1Sensor):
     """Capture foreground window focus changes on Windows."""
 
     def __init__(self) -> None:
+        sensor_name = ContextSource.WINDOW_FOCUS.value
         super().__init__(
-            name="WindowFocusSensor",
+            name=sensor_name,
             description="Capture foreground window focus metadata",
             source_type=ContextSource.WINDOW_FOCUS,
             l1_type=ContextType.WINDOW_FOCUS,
@@ -29,20 +30,21 @@ class WindowFocusSensor(BaseL1Sensor):
         self._is_windows = False
         self._use_stub = False
         self._last_window_handle: Optional[int] = None
+        self._sensor_name = sensor_name
 
     def _init_sensor(self, config: Dict[str, Any]) -> bool:
         sys_type = get_sys_type()
         if sys_type != "windows":
-            logger.warning("WindowFocusSensor only supports Windows; current=%s", sys_type)
+            logger.warning("%s only supports Windows; current=%s", self._sensor_name, sys_type)
             return False
         self._is_windows = True
 
         if is_test_mode:
-            logger.info("WindowFocusSensor running in test mode; hooks disabled")
+            logger.info("%s running in test mode; hooks disabled", self._sensor_name)
             self._use_stub = True
             return True
 
-        logger.info("WindowFocusSensor initialized for Windows foreground window polling")
+        logger.info("%s initialized for Windows foreground window polling", self._sensor_name)
         return True
 
     def _collect_l1_payloads(self) -> List[Dict[str, Any]]:
