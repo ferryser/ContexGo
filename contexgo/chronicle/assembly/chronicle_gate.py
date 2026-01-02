@@ -134,7 +134,9 @@ def save_raw_context(raw: RawContextProperties, base_path: Optional[Path] = None
     else:
         payload = raw.dict()  # type: ignore[call-arg]
     payload.setdefault("source", payload.get("context_type"))
-    payload.setdefault("timestamp", payload.get("create_time"))
+    if payload.get("create_time") is not None:
+        payload["timestamp"] = payload.get("create_time")
+    payload["id"] = payload.get("object_id")
     return save_event(payload, base_path=base_path)
 
 
@@ -263,7 +265,8 @@ class ChronicleGate(BaseChronicle):
             conn.commit()
 
     def _prepare_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        payload.setdefault("id", _uuid7())
+        if "id" not in payload and "object_id" not in payload:
+            payload["id"] = _uuid7()
         payload.setdefault(
             "timestamp",
             _normalize_timestamp(payload.get("timestamp") or payload.get("create_time")),
