@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from contexgo.chronicle.base import BaseCaptureComponent
 from contexgo.chronicle.assembly.chronicle_gate import save_raw_context
 from contexgo.protocol.context import RawContextProperties
-from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
+from contexgo.protocol.enums import ContentFormat, ContextSource, EventType
 from contexgo.infra.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +20,7 @@ class BaseL1Sensor(BaseCaptureComponent):
     """
 
     def __init__(self, name: str, description: str, source_type: ContextSource, 
-                 l1_type: ContextType, content_format: ContentFormat = ContentFormat.TEXT):
+                 l1_type: EventType, content_format: ContentFormat = ContentFormat.TEXT):
         """
         初始化感知器。
         1 绑定 L1 协议类型枚举，避免字符串拼写错误。

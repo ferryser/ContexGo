@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import ctypes
 import importlib.util
+import time
 from ctypes import wintypes
 from typing import Any, Dict, List, Optional
 
 from contexgo.chronicle.base_l1_sensor import BaseL1Sensor
 from contexgo.infra.config import get_sys_type, is_test_mode
 from contexgo.infra.logging_utils import build_log_config, get_logger, setup_logging
-from contexgo.protocol.enums import ContentFormat, ContextSource, ContextType
+from contexgo.protocol.enums import ContentFormat, ContextSource, EventType
 
 setup_logging(build_log_config(__file__))
 logger = get_logger(__name__)
@@ -23,12 +24,13 @@ class WindowFocusSensor(BaseL1Sensor):
             name="WindowFocusSensor",
             description="Capture foreground window focus metadata",
             source_type=ContextSource.WINDOW_FOCUS,
-            l1_type=ContextType.WINDOW_FOCUS,
+            l1_type=EventType.WINDOW_FOCUS,
             content_format=ContentFormat.TEXT,
         )
         self._is_windows = False
         self._use_stub = False
         self._last_window_handle: Optional[int] = None
+        self._last_stub_time: Optional[float] = None
 
     def _init_sensor(self, config: Dict[str, Any]) -> bool:
         sys_type = get_sys_type()
@@ -49,6 +51,10 @@ class WindowFocusSensor(BaseL1Sensor):
         if not self._is_windows:
             return []
         if self._use_stub:
+            now = time.monotonic()
+            if self._last_stub_time is not None and now - self._last_stub_time < 15.0:
+                return []
+            self._last_stub_time = now
             return [
                 {
                     "app_name": "StubApp",
