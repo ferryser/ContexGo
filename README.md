@@ -97,7 +97,7 @@
 * [ ] **验证 Tailscale + WebSocket P2P 连通性。**
 
 ### Phase 1: 感知与本地状态 (Sentinel & L1)
-* [ ] 实现 `WindowWatcher` (句柄) 与 `InputMonitor` (活跃度)。
+* [ ] 实现 `window_focus` (句柄) 与 `input_metric` (活跃度)。
 * [ ] 移植 MineContext 核心算法，实现 `Raw Events -> TimeWindow` 的聚合。
 * [ ] 输出：一个能生成本地 JSON 日志的 CLI 工具。
 
@@ -140,7 +140,7 @@
 
 * 日志统一存放在 `data/logs/`，最多使用一层子目录，子目录名取自 `contexgo/` 下脚本路径的第一层。
 * 命名规则：日志文件名必须与脚本文件名一致（不含扩展名），例如：
-  * `contexgo/chronicle/sensors/focus.py` → `data/logs/chronicle/focus.log`
+  * `contexgo/chronicle/sensors/window_focus.py` → `data/logs/chronicle/window_focus.log`
   * `contexgo/chronicle/assembly/chronicle_gate.py` → `data/logs/chronicle/chronicle_gate.log`
   * `contexgo/main.py` → `data/logs/main.log`
 * 代码需自动创建目录层级（`os.makedirs(os.path.dirname(log_path), exist_ok=True)`）。
