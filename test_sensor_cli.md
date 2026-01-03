@@ -14,7 +14,7 @@
 
 - Windows
 - Python 3.12
-- 后端已启动并暴露 GraphQL：`http://<host>:<port>/graphql`
+- 后端已启动并暴露 GraphQL：`http://127.0.0.1:35011/graphql`
 
 > 订阅需要 `websockets` 依赖，通常随 `strawberry-graphql[fastapi]` 安装。若缺失：
 > ```powershell
@@ -27,7 +27,7 @@
 python -m contexgo.main
 ```
 
-默认监听 `http://127.0.0.1:8000/graphql`。
+默认监听 `http://127.0.0.1:35011/graphql`。
 
 ## 使用 CLI 启动后端（serve）
 
@@ -39,17 +39,6 @@ python -m contexgo.main
 ```powershell
 python .\test_sensor_cli.py serve
 ```
-
-### 指定 GraphQL 地址
-
-当后端绑定地址或端口不是默认值时，使用 `--url` 指定：
-
-```powershell
-python .\test_sensor_cli.py --url http://127.0.0.1:8001/graphql serve
-```
-
-> `serve` 会自动从 `--url` 推导后端监听的 `CONTEXGO_HOST` 和 `CONTEXGO_PORT` 环境变量，
-> 并传递给被启动的 `main.py`。
 
 ### PID 存根与 Ctrl+C
 
@@ -74,19 +63,17 @@ Started main.py (pid=12345)
 - 命令退出后立即取消订阅，不会继续接收其他日志广播；
 - 如果未安装 `websockets`，会跳过 `logStream` 订阅，但 stdout/stderr 仍会被转发。
 
-## 基本用法
+## 常用命令示例（端口固定为 35011）
 
-```powershell
-python .\test_sensor_cli.py --url http://127.0.0.1:8000/graphql sensors
-```
+> 所有示例均以 `http://127.0.0.1:35011/graphql` 为目标地址。
 
-### 查询全部 sensor 状态
+### 1) 查询全部 sensor 状态
 
 ```powershell
 python .\test_sensor_cli.py sensors
 ```
 
-### 启动 / 停止 / 切换 sensor
+### 2) 启动 / 停止 / 切换 sensor
 
 ```powershell
 python .\test_sensor_cli.py start window_focus
@@ -94,14 +81,14 @@ python .\test_sensor_cli.py stop window_focus
 python .\test_sensor_cli.py toggle window_focus
 ```
 
-### 批量启停
+### 3) 批量启停
 
 ```powershell
 python .\test_sensor_cli.py bulk-start window_focus input_metric
 python .\test_sensor_cli.py bulk-stop window_focus input_metric
 ```
 
-### 注册 / 注销 sensor
+### 4) 注册 / 注销 sensor
 
 ```powershell
 python .\test_sensor_cli.py register window_focus --sensor-id window_focus
@@ -114,7 +101,7 @@ python .\test_sensor_cli.py unregister window_focus
 python .\test_sensor_cli.py register window_focus --sensor-id window_focus --config '{"capture_interval": 0.5}'
 ```
 
-### 订阅日志（消费端过滤 1 秒前日志）
+### 5) 订阅日志（消费端过滤 1 秒前日志）
 
 ```powershell
 python .\test_sensor_cli.py log-stream
@@ -126,15 +113,13 @@ python .\test_sensor_cli.py log-stream
 python .\test_sensor_cli.py log-stream --max-age-seconds 0.5
 ```
 
-### 订阅 sensor 状态变化（可选）
+### 6) 订阅 sensor 状态变化（可选）
 
 ```powershell
 python .\test_sensor_cli.py status-stream
 ```
 
-## 连接池配置（多路复用）
-
-为了减少 Windows 套接字占用，CLI 内建 HTTP 连接池：
+### 7) 使用多路复用连接池
 
 ```powershell
 python .\test_sensor_cli.py --pool-size 2 sensors
@@ -147,9 +132,5 @@ python .\test_sensor_cli.py --pool-size 2 sensors
 
 1. **订阅时报错**：请确认已安装 `websockets`。
 2. **日志过滤**：CLI 仅打印时间戳在 1 秒内的日志（可通过 `--max-age-seconds` 调整）。
-3. **端口不一致**：使用 `--url` 指定正确的 GraphQL 地址。
+3. **端口不一致**：此指南固定为 `35011`，确保后端监听端口与 CLI 一致。
 4. **serve 无日志**：确认 `websockets` 已安装，或查看 stdout/stderr 输出是否正常。
-
-```powershell
-python .\test_sensor_cli.py --url http://127.0.0.1:8001/graphql sensors
-```
