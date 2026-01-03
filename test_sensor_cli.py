@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -530,7 +531,139 @@ def _parse_host_port(base_url: str) -> Dict[str, str]:
     return {"CONTEXGO_HOST": host, "CONTEXGO_PORT": str(port)}
 
 
-def handle_serve(base_url: str, timeout: float) -> int:
+class _ControlParser(argparse.ArgumentParser):
+    def exit(self, status: int = 0, message: Optional[str] = None) -> None:
+        if message:
+            raise ValueError(message)
+        raise ValueError("command parsing failed")
+
+    def error(self, message: str) -> None:
+        raise ValueError(message)
+
+
+def _build_control_parser() -> argparse.ArgumentParser:
+    parser = _ControlParser(prog="control", add_help=False)
+    parser.add_argument("-h", "--help", action="help", help="Show this help message")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("sensors", help="List all sensors")
+
+    toggle = subparsers.add_parser("toggle", help="Toggle a sensor")
+    toggle.add_argument("sensor_id")
+
+    start = subparsers.add_parser("start", help="Start a sensor")
+    start.add_argument("sensor_id")
+
+    stop = subparsers.add_parser("stop", help="Stop a sensor")
+    stop.add_argument("sensor_id")
+
+    bulk_start = subparsers.add_parser("bulk-start", help="Start multiple sensors")
+    bulk_start.add_argument("sensor_ids", nargs="+")
+
+    bulk_stop = subparsers.add_parser("bulk-stop", help="Stop multiple sensors")
+    bulk_stop.add_argument("sensor_ids", nargs="+")
+
+    register = subparsers.add_parser("register", help="Register a sensor")
+    register.add_argument("sensor_type")
+    register.add_argument("--sensor-id")
+    register.add_argument("--config", help="JSON config payload")
+
+    unregister = subparsers.add_parser("unregister", help="Unregister a sensor")
+    unregister.add_argument("sensor_id")
+
+    return parser
+
+
+def _dispatch_control_command(command: str, client: GraphQLHTTPClient, parser: argparse.ArgumentParser) -> bool:
+    if command in {"help", "?"}:
+        parser.print_help()
+        return True
+    if command in {"exit", "quit"}:
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        print(f"Invalid command: {exc}", file=sys.stderr)
+        return True
+    if not tokens:
+        return True
+    try:
+        args = parser.parse_args(tokens)
+    except ValueError as exc:
+        print(f"Invalid command: {exc}", file=sys.stderr)
+        return True
+
+    if args.command == "sensors":
+        handle_sensors(client)
+    elif args.command == "toggle":
+        handle_toggle(client, args.sensor_id, None)
+    elif args.command == "start":
+        handle_toggle(client, args.sensor_id, True)
+    elif args.command == "stop":
+        handle_toggle(client, args.sensor_id, False)
+    elif args.command == "bulk-start":
+        handle_bulk(client, args.sensor_ids, True)
+    elif args.command == "bulk-stop":
+        handle_bulk(client, args.sensor_ids, False)
+    elif args.command == "register":
+        handle_register(client, args.sensor_type, args.sensor_id, args.config)
+    elif args.command == "unregister":
+        handle_unregister(client, args.sensor_id)
+    else:
+        print(f"Unknown command: {args.command}", file=sys.stderr)
+    return True
+
+
+def _setup_command_queue(loop: asyncio.AbstractEventLoop) -> tuple[asyncio.Queue[str], Optional[Thread], Event]:
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    stop_event = Event()
+
+    def enqueue_line(line: str) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, line)
+
+    try:
+        loop.add_reader(sys.stdin, lambda: enqueue_line(sys.stdin.readline()))
+        return queue, None, stop_event
+    except (NotImplementedError, RuntimeError):
+        def _reader() -> None:
+            while not stop_event.is_set():
+                line = sys.stdin.readline()
+                enqueue_line(line)
+                if line == "":
+                    break
+
+        thread = Thread(target=_reader, name="command-input", daemon=True)
+        thread.start()
+        return queue, thread, stop_event
+
+
+async def _serve_control_loop(process: subprocess.Popen[str], client: GraphQLHTTPClient) -> int:
+    loop = asyncio.get_running_loop()
+    parser = _build_control_parser()
+    queue, thread, stop_event = _setup_command_queue(loop)
+
+    print("Interactive control loop ready. Type 'help' for commands, 'exit' to stop input.")
+    try:
+        while True:
+            if process.poll() is not None:
+                return process.returncode or 0
+            try:
+                line = await asyncio.wait_for(queue.get(), timeout=0.2)
+            except asyncio.TimeoutError:
+                continue
+            if line == "":
+                break
+            if not _dispatch_control_command(line.strip(), client, parser):
+                break
+    finally:
+        stop_event.set()
+        if thread is None:
+            loop.remove_reader(sys.stdin)
+
+    return process.wait()
+
+
+def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
     main_path = os.path.join(os.path.dirname(__file__), "contexgo", "main.py")
     env = os.environ.copy()
     env.update(_parse_host_port(base_url))
@@ -557,7 +690,8 @@ def handle_serve(base_url: str, timeout: float) -> int:
         log_worker.start()
 
     try:
-        return process.wait()
+        client = GraphQLHTTPClient(base_url, pool_size=pool_size, timeout=timeout)
+        return asyncio.run(_serve_control_loop(process, client))
     except KeyboardInterrupt:
         print("Forwarding SIGINT to main.py...", file=sys.stderr)
         process.send_signal(signal.SIGINT)
@@ -583,7 +717,7 @@ def main() -> None:
         return
 
     if args.command == "serve":
-        exit_code = handle_serve(args.url, args.timeout)
+        exit_code = handle_serve(args.url, args.timeout, args.pool_size)
         raise SystemExit(exit_code)
 
     client = GraphQLHTTPClient(args.url, pool_size=args.pool_size, timeout=args.timeout)
