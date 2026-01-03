@@ -1,6 +1,9 @@
 import argparse
 import asyncio
 import json
+import os
+import signal
+import subprocess
 import sys
 import time
 import uuid
@@ -9,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import client as http_client
 from queue import Empty, LifoQueue
+from threading import Event, Thread
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlparse
 
@@ -222,6 +226,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_stream = subparsers.add_parser("status-stream", help="Subscribe to sensorStatus")
 
+    subparsers.add_parser("serve", help="Run contexgo/main.py and stream logs")
+
     return parser
 
 
@@ -425,6 +431,141 @@ async def handle_status_stream(base_url: str, timeout: float) -> None:
             )
 
 
+class LogSubscriptionWorker:
+    def __init__(self, base_url: str, timeout: float, start_time: datetime) -> None:
+        self._base_url = base_url
+        self._timeout = timeout
+        self._start_time = start_time
+        self._stop_event = Event()
+        self._thread: Optional[Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._task: Optional[asyncio.Task[None]] = None
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = Thread(target=self._run, name="log-stream", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._loop and self._task:
+            self._loop.call_soon_threadsafe(self._task.cancel)
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        try:
+            asyncio.run(self._run_async())
+        except Exception as exc:
+            print(f"Log subscription stopped: {exc}", file=sys.stderr)
+
+    async def _run_async(self) -> None:
+        self._loop = asyncio.get_running_loop()
+        self._task = asyncio.create_task(self._subscribe())
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+
+    async def _subscribe(self) -> None:
+        query = """
+        subscription {
+          logStream {
+            timestamp
+            level
+            message
+            name
+            function
+            line
+          }
+        }
+        """
+        while not self._stop_event.is_set():
+            try:
+                async with GraphQLWebSocketClient(self._base_url, timeout=self._timeout) as client:
+                    async for payload in client.subscribe(query):
+                        if self._stop_event.is_set():
+                            return
+                        if not payload:
+                            continue
+                        event = payload.get("logStream")
+                        if not event:
+                            continue
+                        try:
+                            timestamp = parse_timestamp(event["timestamp"])
+                        except Exception:
+                            timestamp = datetime.now(timezone.utc)
+                        if timestamp < self._start_time:
+                            continue
+                        ts = timestamp.astimezone(timezone.utc).isoformat()
+                        print(
+                            f"[{ts}] {event['level']} {event['name']}:{event['function']}:{event['line']} "
+                            f"{event['message']}"
+                        )
+            except Exception as exc:
+                if self._stop_event.is_set():
+                    return
+                print(f"Log subscription error: {exc}", file=sys.stderr)
+                await asyncio.sleep(1.0)
+
+
+def _pump_stream(stream: Optional[object], writer: object) -> None:
+    if stream is None:
+        return
+    for line in iter(stream.readline, ""):
+        writer.write(line)
+        writer.flush()
+
+
+def _parse_host_port(base_url: str) -> Dict[str, str]:
+    parsed = urlparse(base_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return {"CONTEXGO_HOST": host, "CONTEXGO_PORT": str(port)}
+
+
+def handle_serve(base_url: str, timeout: float) -> int:
+    main_path = os.path.join(os.path.dirname(__file__), "contexgo", "main.py")
+    env = os.environ.copy()
+    env.update(_parse_host_port(base_url))
+    process = subprocess.Popen(
+        [sys.executable, main_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        env=env,
+    )
+    pid = process.pid
+    print(f"Started main.py (pid={pid})")
+    stdout_thread = Thread(target=_pump_stream, args=(process.stdout, sys.stdout), daemon=True)
+    stderr_thread = Thread(target=_pump_stream, args=(process.stderr, sys.stderr), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    log_worker = None
+    if websockets is None:
+        print("websockets not installed; skip logStream subscription", file=sys.stderr)
+    else:
+        log_worker = LogSubscriptionWorker(base_url, timeout, datetime.now(timezone.utc))
+        log_worker.start()
+
+    try:
+        return process.wait()
+    except KeyboardInterrupt:
+        print("Forwarding SIGINT to main.py...", file=sys.stderr)
+        process.send_signal(signal.SIGINT)
+        return process.wait()
+    finally:
+        if log_worker:
+            log_worker.stop()
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
+            process.stderr.close()
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -435,6 +576,10 @@ def main() -> None:
         else:
             asyncio.run(handle_status_stream(args.url, args.timeout))
         return
+
+    if args.command == "serve":
+        exit_code = handle_serve(args.url, args.timeout)
+        raise SystemExit(exit_code)
 
     client = GraphQLHTTPClient(args.url, pool_size=args.pool_size, timeout=args.timeout)
 
