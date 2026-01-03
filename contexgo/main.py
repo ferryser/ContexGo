@@ -25,6 +25,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from contexgo.chronicle.assembly.sensor_manager import SensorManager
 from contexgo.chronicle.assembly.chronicle_gate import shutdown_default_gate
+from contexgo.infra.logger import set_log_broadcast_loop
 from contexgo.infra.logging_utils import get_logger
 from contexgo.protocol.api.schema import schema
 from contexgo.protocol.api.sensor_registry import (
@@ -271,6 +272,7 @@ async def run() -> None:
     STOP_EVENT = asyncio.Event()
 
     loop = asyncio.get_running_loop()
+    set_log_broadcast_loop(loop)
     install_signal_handlers(loop, STOP_EVENT, server)
 
     server_task = asyncio.create_task(server.serve())
