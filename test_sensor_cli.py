@@ -124,10 +124,15 @@ class GraphQLWebSocketClient:
         self._ws = None
 
     async def __aenter__(self) -> "GraphQLWebSocketClient":
-        self._ws = await websockets.connect(f"{self._url}{self._path}")
-        await self._ws.send(json.dumps({"type": "connection_init", "payload": {}}))
-        await self._await_ack()
-        return self
+            # 增加 subprotocols 参数，显式声明支持 graphql-transport-ws
+            self._ws = await websockets.connect(
+                f"{self._url}{self._path}",
+                subprotocols=["graphql-transport-ws"]
+            )
+            # 其余初始化逻辑保持不变
+            await self._ws.send(json.dumps({"type": "connection_init", "payload": {}}))
+            await self._await_ack()
+            return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         if self._ws is not None:
