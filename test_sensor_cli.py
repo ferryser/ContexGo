@@ -655,6 +655,8 @@ async def _serve_control_loop(process: subprocess.Popen[str], client: GraphQLHTT
                 break
             if not _dispatch_control_command(line.strip(), client, parser):
                 break
+    except asyncio.CancelledError:
+        return process.wait()
     finally:
         stop_event.set()
         if thread is None:
@@ -667,6 +669,7 @@ def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
     main_path = os.path.join(os.path.dirname(__file__), "contexgo", "main.py")
     env = os.environ.copy()
     env.update(_parse_host_port(base_url))
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     process = subprocess.Popen(
         [sys.executable, main_path],
         stdout=subprocess.PIPE,
@@ -674,6 +677,7 @@ def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
         text=True,
         bufsize=1,
         env=env,
+        creationflags=creationflags,
     )
     pid = process.pid
     print(f"Started main.py (pid={pid})")
@@ -694,7 +698,10 @@ def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
         return asyncio.run(_serve_control_loop(process, client))
     except KeyboardInterrupt:
         print("Forwarding SIGINT to main.py...", file=sys.stderr)
-        process.send_signal(signal.SIGINT)
+        if os.name == "nt":
+            process.send_signal(signal.CTRL_C_EVENT)
+        else:
+            process.send_signal(signal.SIGINT)
         return process.wait()
     finally:
         if log_worker:
