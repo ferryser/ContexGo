@@ -1,3 +1,10 @@
+# Node.js
+node_modules/
+dist/
+build/
+.env
+.eslintcache
+
 # --- 1. Python 运行环境 ---
 __pycache__/
 build/
@@ -31,3 +38,4 @@ data/
 logs/*
 data/*
 *.log
+*.lock
