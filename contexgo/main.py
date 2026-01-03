@@ -26,7 +26,7 @@ from strawberry.fastapi import GraphQLRouter
 from contexgo.chronicle.assembly.sensor_manager import SensorManager
 from contexgo.chronicle.assembly.chronicle_gate import shutdown_default_gate
 from contexgo.infra.logger import set_log_broadcast_loop
-from contexgo.infra.logging_utils import get_logger
+from contexgo.infra.logging_utils import build_log_config, get_logger, setup_logging
 from contexgo.protocol.api.schema import schema
 from contexgo.protocol.api.sensor_registry import (
     get_sensor_factory,
@@ -249,6 +249,7 @@ def install_signal_handlers(
 
 
 async def run() -> None:
+    setup_logging(build_log_config(__file__))
     host = os.getenv("CONTEXGO_HOST", "127.0.0.1")
     port = int(os.getenv("CONTEXGO_PORT", "35011"))
     instance_lock = acquire_instance_lock(host, port)
@@ -275,18 +276,22 @@ async def run() -> None:
     set_log_broadcast_loop(loop)
     install_signal_handlers(loop, STOP_EVENT, server)
 
+    logger.info("ContexGo server starting on %s:%s", host, port)
     server_task = asyncio.create_task(server.serve())
     manager = _get_sensor_manager()
     if global_config:
         manager.apply_global_config(global_config)
     manager.start_all()
+    logger.info("ContexGo server ready; sensors started")
     sensor_task = asyncio.create_task(manager.monitor_health(STOP_EVENT))
 
     await STOP_EVENT.wait()
+    logger.info("ContexGo server stopping")
     server.should_exit = True
     manager.stop_all()
     await shutdown_default_gate()
     await asyncio.gather(server_task, sensor_task, return_exceptions=True)
+    logger.info("ContexGo server stopped")
 
 
 def main() -> None:

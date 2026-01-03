@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import client as http_client
 from queue import Empty, LifoQueue
-from threading import Event, Thread
-from typing import Any, Dict, Iterable, Optional
+from threading import Event, Lock, Thread
+from typing import Any, Dict, Iterable, Optional, TextIO, Callable
 from urllib.parse import urlparse
 
 
@@ -232,7 +232,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     status_stream = subparsers.add_parser("status-stream", help="Subscribe to sensorStatus")
 
-    subparsers.add_parser("serve", help="Run contexgo/main.py and stream logs")
+    serve = subparsers.add_parser("serve", help="Run contexgo/main.py and stream logs")
+    serve.add_argument("--log-stream", action="store_true", help="Subscribe to logStream and print all logs")
 
     return parser
 
@@ -516,12 +517,39 @@ class LogSubscriptionWorker:
                 await asyncio.sleep(1.0)
 
 
-def _pump_stream(stream: Optional[object], writer: object) -> None:
+class PromptPrinter:
+    def __init__(self, prompt: str, output: TextIO) -> None:
+        self._prompt = prompt
+        self._output = output
+        self._lock = Lock()
+
+    def show(self) -> None:
+        with self._lock:
+            self._output.write(self._prompt)
+            self._output.flush()
+
+    def write_line(self, line: str, writer: TextIO) -> None:
+        with self._lock:
+            if line and not line.endswith("\n"):
+                line = f"{line}\n"
+            writer.write(line)
+            writer.flush()
+            self._output.write(self._prompt)
+            self._output.flush()
+
+
+def _pump_stream(
+    stream: Optional[object],
+    writer: TextIO,
+    should_emit: Callable[[str], bool],
+    prompt: PromptPrinter,
+) -> None:
     if stream is None:
         return
     for line in iter(stream.readline, ""):
-        writer.write(line)
-        writer.flush()
+        if not should_emit(line):
+            continue
+        prompt.write_line(line, writer)
 
 
 def _parse_host_port(base_url: str) -> Dict[str, str]:
@@ -637,12 +665,17 @@ def _setup_command_queue(loop: asyncio.AbstractEventLoop) -> tuple[asyncio.Queue
         return queue, thread, stop_event
 
 
-async def _serve_control_loop(process: subprocess.Popen[str], client: GraphQLHTTPClient) -> int:
+async def _serve_control_loop(
+    process: subprocess.Popen[str],
+    client: GraphQLHTTPClient,
+    prompt: PromptPrinter,
+) -> int:
     loop = asyncio.get_running_loop()
     parser = _build_control_parser()
     queue, thread, stop_event = _setup_command_queue(loop)
 
     print("Interactive control loop ready. Type 'help' for commands, 'exit' to stop input.")
+    prompt.show()
     try:
         while True:
             if process.poll() is not None:
@@ -655,6 +688,7 @@ async def _serve_control_loop(process: subprocess.Popen[str], client: GraphQLHTT
                 break
             if not _dispatch_control_command(line.strip(), client, parser):
                 break
+            prompt.show()
     except asyncio.CancelledError:
         return process.wait()
     finally:
@@ -665,7 +699,11 @@ async def _serve_control_loop(process: subprocess.Popen[str], client: GraphQLHTT
     return process.wait()
 
 
-def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
+def _is_main_lifecycle_log(line: str) -> bool:
+    return "contexgo.main" in line
+
+
+def handle_serve(base_url: str, timeout: float, pool_size: int, log_stream: bool) -> int:
     main_path = os.path.join(os.path.dirname(__file__), "contexgo", "main.py")
     env = os.environ.copy()
     env.update(_parse_host_port(base_url))
@@ -681,21 +719,31 @@ def handle_serve(base_url: str, timeout: float, pool_size: int) -> int:
     )
     pid = process.pid
     print(f"Started main.py (pid={pid})")
-    stdout_thread = Thread(target=_pump_stream, args=(process.stdout, sys.stdout), daemon=True)
-    stderr_thread = Thread(target=_pump_stream, args=(process.stderr, sys.stderr), daemon=True)
+    prompt = PromptPrinter("ContexGo > ", sys.stdout)
+    stdout_thread = Thread(
+        target=_pump_stream,
+        args=(process.stdout, sys.stdout, _is_main_lifecycle_log, prompt),
+        daemon=True,
+    )
+    stderr_thread = Thread(
+        target=_pump_stream,
+        args=(process.stderr, sys.stderr, _is_main_lifecycle_log, prompt),
+        daemon=True,
+    )
     stdout_thread.start()
     stderr_thread.start()
 
     log_worker = None
-    if websockets is None:
-        print("websockets not installed; skip logStream subscription", file=sys.stderr)
-    else:
-        log_worker = LogSubscriptionWorker(base_url, timeout, datetime.now(timezone.utc))
-        log_worker.start()
+    if log_stream:
+        if websockets is None:
+            print("websockets not installed; skip logStream subscription", file=sys.stderr)
+        else:
+            log_worker = LogSubscriptionWorker(base_url, timeout, datetime.now(timezone.utc))
+            log_worker.start()
 
     try:
         client = GraphQLHTTPClient(base_url, pool_size=pool_size, timeout=timeout)
-        return asyncio.run(_serve_control_loop(process, client))
+        return asyncio.run(_serve_control_loop(process, client, prompt))
     except KeyboardInterrupt:
         print("Forwarding SIGINT to main.py...", file=sys.stderr)
         if os.name == "nt":
@@ -724,7 +772,7 @@ def main() -> None:
         return
 
     if args.command == "serve":
-        exit_code = handle_serve(args.url, args.timeout, args.pool_size)
+        exit_code = handle_serve(args.url, args.timeout, args.pool_size, args.log_stream)
         raise SystemExit(exit_code)
 
     client = GraphQLHTTPClient(args.url, pool_size=args.pool_size, timeout=args.timeout)
