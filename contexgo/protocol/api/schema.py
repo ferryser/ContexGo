@@ -6,6 +6,7 @@ from typing import AsyncGenerator, List, Optional
 import strawberry
 from strawberry.scalars import JSON
 
+from contexgo.infra.logger import log_broadcast, set_log_broadcast_loop
 from contexgo.protocol.api.sensor_registry import (
     SensorEntry,
     create_sensor,
@@ -67,6 +68,18 @@ class SensorErrorEvent:
     error: str
     error_count: int
     timestamp: datetime
+
+
+@strawberry.type
+class LogEvent:
+    timestamp: datetime
+    level: str
+    message: str
+    name: str
+    function: str
+    line: int
+
+
 @strawberry.input
 class SensorRegistrationInput:
     sensor_type: str
@@ -280,6 +293,13 @@ class Subscription:
         finally:
             if subscriber in _SENSOR_ERROR_SUBSCRIBERS:
                 _SENSOR_ERROR_SUBSCRIBERS.remove(subscriber)
+
+    @strawberry.subscription(name="logStream")
+    async def log_stream(self) -> AsyncGenerator[LogEvent, None]:
+        set_log_broadcast_loop(asyncio.get_running_loop())
+        while True:
+            payload = await log_broadcast.get()
+            yield LogEvent(**payload)
 
     @strawberry.subscription
     async def ticker(self, interval: float = 1.0) -> AsyncGenerator[int, None]:

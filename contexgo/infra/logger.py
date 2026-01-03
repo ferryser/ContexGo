@@ -1,11 +1,53 @@
 # -*- coding: utf-8 -*-
 # 路径：contexgo/infra/logger.py
 
+import asyncio
+import contextlib
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from loguru import logger
+
+LOG_BROADCAST_MAXSIZE = 50
+log_broadcast: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=LOG_BROADCAST_MAXSIZE)
+_log_broadcast_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def set_log_broadcast_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global _log_broadcast_loop
+    _log_broadcast_loop = loop
+
+
+def _enqueue_log_broadcast(payload: Dict[str, Any]) -> None:
+    try:
+        log_broadcast.put_nowait(payload)
+    except asyncio.QueueFull:
+        with contextlib.suppress(asyncio.QueueEmpty):
+            log_broadcast.get_nowait()
+            log_broadcast.task_done()
+        with contextlib.suppress(asyncio.QueueFull):
+            log_broadcast.put_nowait(payload)
+
+
+def _broadcast_sink(message: Any) -> None:
+    record = message.record
+    timestamp = record["time"]
+    if hasattr(timestamp, "datetime"):
+        timestamp = timestamp.datetime
+    payload = {
+        "timestamp": timestamp,
+        "level": record["level"].name,
+        "message": record["message"],
+        "name": record["name"],
+        "function": record["function"],
+        "line": record["line"],
+    }
+    loop = _log_broadcast_loop
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(_enqueue_log_broadcast, payload)
+    else:
+        _enqueue_log_broadcast(payload)
 
 def _derive_log_path_from_script(script_path: str) -> str:
     script = Path(script_path).resolve()
@@ -69,6 +111,9 @@ class LogManager:
         # 2. 配置物理文件持久化
         log_path = _resolve_log_path(config)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+        # 3. 配置日志广播队列
+        logger.add(_broadcast_sink, level=level, enqueue=True)
 
         # 滚动配置：单文件 5MB，保留 5 个历史文件
         logger.add(
