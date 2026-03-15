@@ -690,7 +690,7 @@ async def _serve_control_loop(
                 break
             prompt.show()
     except asyncio.CancelledError:
-        return process.wait()
+        pass
     finally:
         stop_event.set()
         if thread is None:
